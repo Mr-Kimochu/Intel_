@@ -22,3 +22,8 @@ export async function getTerrainProfile(lat, lon, lengthM = 300) {
   });
   return data;
 }
+
+export async function getOsmContext(lat, lon) {
+  const { data } = await client.get("/osm-context", { params: { lat, lon } });
+  return data;
+}
