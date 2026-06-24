@@ -17,7 +17,7 @@ CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days — elevation never changes
 
 cache = Cache(CACHE_DIR)
 
-# server deployments auth
+# server deployments auths
 import json
 raw_key = os.getenv("EE_SERVICE_ACCOUNT_JSON")
 
