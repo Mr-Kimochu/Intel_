@@ -38,7 +38,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "http://localhost:5173",
-        "https://sakinsiteintel.vercel.app/",
+        "https://sakinsiteintel.vercel.app",
         ],  # vite dev server
     allow_methods=["GET"],
     allow_headers=["*"],
