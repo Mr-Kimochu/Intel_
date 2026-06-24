@@ -36,7 +36,7 @@ app = FastAPI(title="Construction Site Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],  # vite dev server
+    allow_origins=["http://localhost:5173", "https://intel-ten-henna.vercel.app/"],  # vite dev server
     allow_methods=["GET"],
     allow_headers=["*"],
 )
