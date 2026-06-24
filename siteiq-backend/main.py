@@ -19,10 +19,8 @@ cache = Cache(CACHE_DIR)
 
 # server deployments auth
 import json
-credentials = ee.ServiceAccountCredentials(
-    email=os.getenv("EE_SERVICE_ACCOUNT"),
-    key_data=os.getenv("EE_PRIVATE_KEY"), 
-)
+key_dict = json.loads(os.getenv("EE_SERVICE_ACCOUNT_JSON"))
+credentials = ee.ServiceAccountCredentials.from_json_keyfile_dict(key_dict)
 ee.Initialize(credentials=credentials, project=EE_PROJECT)
 
 app = FastAPI(title="Construction Site Intelligence API")
