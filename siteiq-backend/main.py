@@ -19,9 +19,18 @@ cache = Cache(CACHE_DIR)
 
 # server deployments auth
 import json
-key_dict = json.loads(os.getenv("EE_SERVICE_ACCOUNT_JSON"))
-credentials = ee.ServiceAccountCredentials.from_json_keyfile_dict(key_dict)
-ee.Initialize(credentials=credentials, project=EE_PROJECT)
+raw_key = os.getenv("EE_SERVICE_ACCOUNT_JSON")
+
+if raw_key is None:
+    raise RuntimeError("EE_SERVICE_ACCOUNT_JSON is not set. Check Render Environment tab.")
+
+key_dict = json.loads(raw_key)
+
+credentials = ee.ServiceAccountCredentials(
+    email=key_dict["client_email"],
+    key_data=json.dumps(key_dict),   # ee accepts the full JSON string directly
+)
+ee.Initialize(credentials=credentials, project=key_dict["project_id"])
 
 app = FastAPI(title="Construction Site Intelligence API")
 
