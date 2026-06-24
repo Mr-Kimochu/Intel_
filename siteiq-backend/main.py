@@ -17,7 +17,13 @@ CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days — elevation never changes
 
 cache = Cache(CACHE_DIR)
 
-ee.Initialize(project=EE_PROJECT)
+# server deployments auth
+import json
+credentials = ee.ServiceAccountCredentials(
+    email=os.getenv("EE_SERVICE_ACCOUNT"),
+    key_data=os.getenv("EE_PRIVATE_KEY"), 
+)
+ee.Initialize(credentials=credentials, project=EE_PROJECT)
 
 app = FastAPI(title="Construction Site Intelligence API")
 

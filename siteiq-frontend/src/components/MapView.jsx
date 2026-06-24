@@ -10,7 +10,6 @@ L.Icon.Default.mergeOptions({
   shadowUrl:     "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
 });
 
-// Haversine offset: move (lat,lon) by distance_m along bearing_deg
 function offsetLatLon(lat, lon, distanceM, bearingDeg) {
   const R = 6371000;
   const b = (bearingDeg * Math.PI) / 180;
@@ -32,18 +31,16 @@ function ClickHandler({ onPick }) {
   return null;
 }
 
-// Low-opacity circle showing the elevation/slope stats buffer
 function ElevationBufferOverlay({ pin, terrain }) {
   if (!pin || !terrain?.site_buffer) return null;
-  const radius = terrain.site_buffer.radius_m;
   return (
     <Circle
       center={[pin.lat, pin.lon]}
-      radius={radius}
+      radius={terrain.site_buffer.radius_m}
       pathOptions={{
-        color: "#b5651d",
-        fillColor: "#b5651d",
-        fillOpacity: 0.08,
+        color: "#374151",
+        fillColor: "#374151",
+        fillOpacity: 0.07,
         weight: 1.5,
         dashArray: "5 4",
       }}
@@ -51,33 +48,25 @@ function ElevationBufferOverlay({ pin, terrain }) {
   );
 }
 
-// Two dashed arms showing the N-S and E-W terrain profile reach
 function TerrainProfileOverlay({ pin, profile }) {
   if (!pin || !profile) return null;
   const half = profile.length_m / 2;
-
-  const northEnd = offsetLatLon(pin.lat, pin.lon, half, 0);
-  const southEnd = offsetLatLon(pin.lat, pin.lon, half, 180);
-  const eastEnd  = offsetLatLon(pin.lat, pin.lon, half, 90);
-  const westEnd  = offsetLatLon(pin.lat, pin.lon, half, 270);
-
+  const N = offsetLatLon(pin.lat, pin.lon, half, 0);
+  const S = offsetLatLon(pin.lat, pin.lon, half, 180);
+  const E = offsetLatLon(pin.lat, pin.lon, half, 90);
+  const W = offsetLatLon(pin.lat, pin.lon, half, 270);
   return (
     <>
-      <Polyline
-        positions={[northEnd, [pin.lat, pin.lon], southEnd]}
-        pathOptions={{ color: "#3a5fa0", weight: 1.5, dashArray: "6 4", opacity: 0.6 }}
-      />
-      <Polyline
-        positions={[westEnd, [pin.lat, pin.lon], eastEnd]}
-        pathOptions={{ color: "#3a5fa0", weight: 1.5, dashArray: "6 4", opacity: 0.6 }}
-      />
+      <Polyline positions={[N, [pin.lat, pin.lon], S]}
+        pathOptions={{ color: "#6b7280", weight: 1.5, dashArray: "6 4", opacity: 0.7 }} />
+      <Polyline positions={[W, [pin.lat, pin.lon], E]}
+        pathOptions={{ color: "#6b7280", weight: 1.5, dashArray: "6 4", opacity: 0.7 }} />
     </>
   );
 }
 
 export default function MapView({ pin, osm, terrain, profile, toggles, onPick }) {
   const center = pin ? [pin.lat, pin.lon] : [-3.45, 38.35];
-
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
       <MapContainer center={center} zoom={pin ? 14 : 10} style={{ height: "100%", width: "100%" }}>
@@ -87,12 +76,11 @@ export default function MapView({ pin, osm, terrain, profile, toggles, onPick })
         />
         <ClickHandler onPick={onPick} />
         {pin && <Marker position={[pin.lat, pin.lon]} />}
-
         {toggles.elevationBuffer && <ElevationBufferOverlay pin={pin} terrain={terrain} />}
         {toggles.terrainProfile  && <TerrainProfileOverlay pin={pin} profile={profile} />}
         {toggles.osmContext      && <OsmOverlay osm={osm} />}
       </MapContainer>
-
+      {/* Legend sits at z-index 400 — below mobile panel at 1500 */}
       {osm && toggles.osmContext && <OsmLegend />}
     </div>
   );

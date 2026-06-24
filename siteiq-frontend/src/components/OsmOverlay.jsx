@@ -131,16 +131,17 @@ export function OsmLegend() {
         position: "absolute",
         bottom: 32,
         left: 12,
-        zIndex: 1000,
-        background: "rgba(255,253,247,0.95)",
-        border: "1px solid #d8d6c8",
+        zIndex: 400,   /* below mobile panel (1500) and header (1000) */
+        background: "rgba(255,255,255,0.95)",
+        border: "1px solid #e5e7eb",
         borderRadius: 8,
         padding: "10px 14px",
         minWidth: 160,
         pointerEvents: "none",
+        boxShadow: "0 1px 6px rgba(0,0,0,0.08)",
       }}
     >
-      <p style={{ margin: "0 0 6px", fontSize: 11, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.05em", color: "#5c6354" }}>
+      <p style={{ margin: "0 0 6px", fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af" }}>
         Context layers
       </p>
       <LegendItem color="#e07b39" label="Major road" />

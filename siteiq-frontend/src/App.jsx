@@ -1,12 +1,12 @@
 import { useState, useCallback } from "react";
 import MapView from "./components/MapView";
 import SitePanel from "./components/SitePanel";
-import ElevationProfileChart from "./components/ElevationProfileChart";
+import LayersMenu from "./components/LayersMenu.jsx";
 import { getElevation, getTerrain, getTerrainProfile, getOsmContext } from "./api";
 import "./App.css";
 
 const DEFAULT_TOGGLES = {
-  osmContext:      true,
+  osmContext:      false,
   elevationBuffer: true,
   terrainProfile:  true,
 };
@@ -54,10 +54,16 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* ── Header ── */}
       <header className="app-header">
-        <h1>Construction Site Intelligence</h1>
-        <p>Drop a pin. Get answers, not datasets.</p>
+        <div className="app-header-title">
+          <h1>Site Intelligence</h1>
+          <span className="app-header-sub">Drop a pin — get answers</span>
+        </div>
+        <LayersMenu toggles={toggles} onToggle={handleToggle} />
       </header>
+
+      {/* ── Body ── */}
       <div className="app-body">
         <div className="map-pane">
           <MapView
@@ -69,22 +75,24 @@ export default function App() {
             onPick={handlePick}
           />
         </div>
-        <aside className="side-pane">
-          <SitePanel
-            pin={pin}
-            elevation={elevation}
-            terrain={terrain}
-            osm={osm}
-            loading={loading}
-            error={error}
-            toggles={toggles}
-            onToggle={handleToggle}
-          />
-          {!loading && profile && toggles.terrainProfile && (
-            <ElevationProfileChart profile={profile} />
-          )}
-        </aside>
+        <SitePanel
+          pin={pin}
+          elevation={elevation}
+          terrain={terrain}
+          osm={osm}
+          profile={profile}
+          loading={loading}
+          error={error}
+          toggles={toggles}
+        />
       </div>
+
+      {/* ── Footer ── */}
+      <footer className="app-footer">
+        <span>Made by <a href="mailto:sakindeborah@outlook.com">Sakin</a> · 2026</span>
+        <span>·</span>
+        <span>Open source · Data: OSM, NASA, ESA</span>
+      </footer>
     </div>
   );
 }
