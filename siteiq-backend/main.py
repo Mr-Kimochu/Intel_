@@ -2,7 +2,7 @@ import io
 import math
 import os
 from typing import Dict, List, Optional
-
+# https://secure.dc7.pageuppeople.com/apply/671/cw/applicationForm/exitInfo.asp
 import ee
 import matplotlib
 matplotlib.use("Agg")  # non-interactive backend — must be set before importing pyplot
@@ -40,13 +40,14 @@ credentials = ee.ServiceAccountCredentials(
 ee.Initialize(credentials=credentials, project=key_dict["project_id"])
 
 # ── App ──────────────────────────────────────────────────────────────────────
-app = FastAPI(title="Construction Site Intelligence API")
+app = FastAPI(title="Site Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
     # allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:5173",
     allow_origins=[
         "http://localhost:5173",
+        "https://geositeintel.vercel.app/",
         "https://sakinsiteintel.vercel.app",
         ], 
     allow_methods=["GET"],
