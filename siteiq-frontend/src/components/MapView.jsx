@@ -1,7 +1,11 @@
-import { MapContainer, TileLayer, Marker, useMapEvents, Circle, Polyline } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, useMapEvents, Circle, Polyline, useMap } from "react-leaflet";
+import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import OsmOverlay, { OsmLegend } from "./OsmOverlay";
+import LocationControl from "./LocationControl.jsx";
+import ContourLayer from "./ContourLayer";
+import DrainageOverlay from "./DrainageOverlay";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -31,19 +35,21 @@ function ClickHandler({ onPick }) {
   return null;
 }
 
+function FlyToPin({ pin }) {
+  const map = useMap();
+  useEffect(() => {
+    if (pin) map.flyTo([pin.lat, pin.lon], 15, { duration: 1.2 });
+  }, [pin, map]);
+  return null;
+}
+
 function ElevationBufferOverlay({ pin, terrain }) {
   if (!pin || !terrain?.site_buffer) return null;
   return (
     <Circle
       center={[pin.lat, pin.lon]}
       radius={terrain.site_buffer.radius_m}
-      pathOptions={{
-        color: "#374151",
-        fillColor: "#374151",
-        fillOpacity: 0.07,
-        weight: 1.5,
-        dashArray: "5 4",
-      }}
+      pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 0.07, weight: 1.5, dashArray: "5 4" }}
     />
   );
 }
@@ -65,22 +71,31 @@ function TerrainProfileOverlay({ pin, profile }) {
   );
 }
 
-export default function MapView({ pin, osm, terrain, profile, toggles, onPick }) {
+export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles, onPick }) {
   const center = pin ? [pin.lat, pin.lon] : [-3.45, 38.35];
+
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
-      <MapContainer center={center} zoom={pin ? 14 : 10} style={{ height: "100%", width: "100%" }}>
+      <MapContainer center={center} zoom={pin ? 14 : 10} style={{ height: "100%", width: "100%" }} zoomControl={false}>
         <TileLayer
           attribution='&copy; OpenStreetMap contributors'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler onPick={onPick} />
+        <FlyToPin pin={pin} />
         {pin && <Marker position={[pin.lat, pin.lon]} />}
+
+        {/* existing layers */}
         {toggles.elevationBuffer && <ElevationBufferOverlay pin={pin} terrain={terrain} />}
         {toggles.terrainProfile  && <TerrainProfileOverlay pin={pin} profile={profile} />}
         {toggles.osmContext      && <OsmOverlay osm={osm} />}
+
+        {/* Phase 3.5 layers */}
+        {toggles.drainage  && <DrainageOverlay pin={pin} radiusM={2000} />}
+        {toggles.contours  && <ContourLayer gridData={elevGrid} />}
       </MapContainer>
-      {/* Legend sits at z-index 400 — below mobile panel at 1500 */}
+
+      <LocationControl onLocate={onPick} />
       {osm && toggles.osmContext && <OsmLegend />}
     </div>
   );

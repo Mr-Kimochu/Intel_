@@ -8,17 +8,18 @@ from diskcache import Cache
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+
+import json
 
 load_dotenv()
 
-EE_PROJECT = os.getenv("EE_PROJECT_ID")
 CACHE_DIR = os.getenv("CACHE_DIR", "./.cache")
-CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days — elevation never changes
+CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 cache = Cache(CACHE_DIR)
 
-# server deployments auths
-import json
+# ── Earth Engine auth ────────────────────────────────────────────────────────
 raw_key = os.getenv("EE_SERVICE_ACCOUNT_JSON")
 
 if raw_key is None:
@@ -28,25 +29,26 @@ key_dict = json.loads(raw_key)
 
 credentials = ee.ServiceAccountCredentials(
     email=key_dict["client_email"],
-    key_data=json.dumps(key_dict),   # ee accepts the full JSON string directly
+    key_data=json.dumps(key_dict),
 )
 ee.Initialize(credentials=credentials, project=key_dict["project_id"])
 
+# ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Construction Site Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "https://sakinsiteintel.vercel.app",
-        ],  # vite dev server
+    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:5173",
     allow_methods=["GET"],
     allow_headers=["*"],
 )
 
-DEM = ee.Image("USGS/SRTMGL1_003")  # 30m global elevation
-SLOPE = ee.Terrain.slope(DEM)  # degrees, 0-90
-ASPECT = ee.Terrain.aspect(DEM)  # compass degrees the slope faces, 0-360
+DEM   = ee.Image("USGS/SRTMGL1_003")        # 30m global elevation
+SLOPE = ee.Terrain.slope(DEM)               # degrees, 0-90
+ASPECT= ee.Terrain.aspect(DEM)              # compass degrees the slope faces, 0-360
+MERIT = ee.Image("MERIT/Hydro/v1_0_1")     # 90m — HAND, upstream area, river mask
+HAND  = MERIT.select("hnd")                # height above nearest drainage (metres)
+UPA   = MERIT.select("upa")                # upstream contributing area (km²)
 
 
 def cache_key(lat: float, lon: float, precision: int = 4) -> str:
@@ -526,3 +528,205 @@ def get_osm_context(
     payload = {"lat": lat, "lon": lon, **data}
     cache.set(key, payload, expire=OSM_CACHE_TTL)
     return payload
+
+
+# ─── Phase 3.5 · DEM contours, drainage, flood risk ──────────────────────────
+
+def composite_flood_risk(hand_m: Optional[float], slope_deg: Optional[float], waterway_dist_m: Optional[int]) -> dict:
+    """
+    Three-input risk score:
+      Primary   — HAND (vertical exposure to drainage)
+      Modifier  — slope (flat land near drainage floods wider)
+      Secondary — OSM waterway proximity (catches small streams absent from MERIT 90m)
+    """
+    if hand_m is None:
+        return {
+            "level": "unknown", "label": "Insufficient data",
+            "description": "HAND data unavailable at this location. Consider commissioning a site-specific assessment.",
+            "color": "#9ca3af",
+        }
+
+    if hand_m < 5:
+        level = "high"
+    elif hand_m < 10:
+        level = "medium-high" if (slope_deg is not None and slope_deg < 5) else "medium"
+    else:
+        # Low HAND but very close OSM waterway — small stream not in MERIT model
+        level = "medium" if (waterway_dist_m is not None and waterway_dist_m < 200) else "low"
+
+    slope_note = f", {slope_deg:.1f}° slope" if slope_deg is not None else ""
+    ww_note = f" Nearest waterway {waterway_dist_m}m." if waterway_dist_m is not None else ""
+
+    LABELS = {
+        "high": (
+            "High flood risk",
+            f"Site sits only {hand_m:.1f}m above nearest drainage{slope_note}. Regularly inundated in moderate rainfall events.{ww_note} A hydrological assessment is strongly recommended before any site works.",
+            "#ef4444",
+        ),
+        "medium-high": (
+            "Medium-high flood risk",
+            f"Site is {hand_m:.1f}m above drainage on gently sloping terrain{slope_note}. Flat land amplifies inundation extent during heavy rainfall.{ww_note}",
+            "#f97316",
+        ),
+        "medium": (
+            "Moderate flood risk",
+            f"Site is {hand_m:.1f}m above nearest drainage{slope_note}.{ww_note} Risk increases during prolonged or high-intensity rainfall.",
+            "#f59e0b",
+        ),
+        "low": (
+            "Low flood risk",
+            f"Site sits {hand_m:.1f}m above nearest drainage channel{slope_note}. Low inundation risk under normal conditions.",
+            "#22c55e",
+        ),
+    }
+
+    label, description, color = LABELS[level]
+    return {"level": level, "label": label, "description": description, "color": color}
+
+
+def fetch_flood_risk(lat: float, lon: float, radius_m: int, waterway_dist_m: Optional[int]) -> dict:
+    point  = ee.Geometry.Point([lon, lat])
+    buffer = point.buffer(radius_m)
+
+    hand_point = HAND.reduceRegion(
+        reducer=ee.Reducer.first(), geometry=point, scale=90
+    ).getInfo()
+
+    hand_buffer = HAND.reduceRegion(
+        reducer=ee.Reducer.mean().combine(ee.Reducer.min(), sharedInputs=True),
+        geometry=buffer, scale=90, maxPixels=1e8,
+    ).getInfo()
+
+    slope_point = SLOPE.reduceRegion(
+        reducer=ee.Reducer.first(), geometry=point, scale=30
+    ).getInfo()
+
+    hand_m  = hand_point.get("hnd")
+    slope_d = slope_point.get("slope")
+
+    risk = composite_flood_risk(hand_m, slope_d, waterway_dist_m)
+
+    return {
+        "hand": {
+            "point_m":      round(hand_m, 1) if hand_m is not None else None,
+            "buffer_mean_m": round(hand_buffer.get("hnd_mean", 0) or 0, 1),
+            "buffer_min_m":  round(hand_buffer.get("hnd_min", 0) or 0, 1),
+        },
+        "risk": risk,
+        "inputs": {
+            "hand_m":          round(hand_m, 1) if hand_m is not None else None,
+            "slope_deg":       round(slope_d, 1) if slope_d is not None else None,
+            "waterway_dist_m": waterway_dist_m,
+        },
+    }
+
+
+def fetch_elevation_grid(lat: float, lon: float, radius_m: int) -> dict:
+    region = ee.Geometry.Point([lon, lat]).buffer(radius_m).bounds()
+
+    # Target ~40 samples across the diameter; clamp to native 30m minimum
+    scale = max(30, int((radius_m * 2) / 40))
+    dem_scaled = DEM.reproject(crs="EPSG:4326", scale=scale)
+
+    sampled   = dem_scaled.sampleRectangle(region=region, defaultValue=-9999)
+    array_2d  = sampled.get("elevation").getInfo()
+    rows      = len(array_2d)
+    cols      = len(array_2d[0]) if rows else 0
+
+    # Bounding box for georeferencing on the frontend
+    bbox = region.bounds().getInfo()["coordinates"][0]
+    west, south = bbox[0]
+    east, north = bbox[2]
+
+    return {
+        "grid":   array_2d,
+        "rows":   rows,
+        "cols":   cols,
+        "bounds": {"north": north, "south": south, "east": east, "west": west},
+        "scale_m": scale,
+        "radius_m": radius_m,
+    }
+
+
+def fetch_drainage_png(lat: float, lon: float, radius_m: int) -> bytes:
+    """
+    Render MERIT upstream-area thresholded channels as a blue PNG.
+    Channels defined as UPA > 10 km² (meaningful stream network).
+    """
+    region   = ee.Geometry.Point([lon, lat]).buffer(radius_m).bounds()
+    channels = UPA.updateMask(UPA.gt(10))
+
+    thumb_url = channels.getThumbURL({
+        "region":     region,
+        "dimensions": [512, 512],
+        "format":     "png",
+        "palette":    ["c7e9ff", "4a9eff", "0057b8"],
+        "min": 10, "max": 10000,
+    })
+
+    resp = requests.get(thumb_url, timeout=30)
+    resp.raise_for_status()
+    return resp.content
+
+
+@app.get("/elevation-grid")
+def get_elevation_grid(
+    lat:      float = Query(..., ge=-90, le=90),
+    lon:      float = Query(..., ge=-180, le=180),
+    radius_m: int   = Query(500, ge=100, le=2000),
+):
+    key    = f"grid:{round(lat, 4)}:{round(lon, 4)}:{radius_m}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = fetch_elevation_grid(lat, lon, radius_m)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GEE grid error: {exc}")
+
+    payload = {"lat": lat, "lon": lon, **data}
+    cache.set(key, payload, expire=CACHE_TTL_SECONDS)
+    return payload
+
+
+@app.get("/flood-risk")
+def get_flood_risk(
+    lat:             float = Query(..., ge=-90, le=90),
+    lon:             float = Query(..., ge=-180, le=180),
+    radius_m:        int   = Query(200, ge=50, le=1000),
+    waterway_dist_m: Optional[int] = Query(None),
+):
+    key    = f"flood:{round(lat, 4)}:{round(lon, 4)}:{radius_m}:{waterway_dist_m}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = fetch_flood_risk(lat, lon, radius_m, waterway_dist_m)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GEE flood risk error: {exc}")
+
+    payload = {"lat": lat, "lon": lon, **data}
+    cache.set(key, payload, expire=CACHE_TTL_SECONDS)
+    return payload
+
+
+@app.get("/drainage-tile", response_class=Response)
+def get_drainage_tile(
+    lat:      float = Query(..., ge=-90, le=90),
+    lon:      float = Query(..., ge=-180, le=180),
+    radius_m: int   = Query(2000, ge=500, le=5000),
+):
+    key    = f"drain:{round(lat, 4)}:{round(lon, 4)}:{radius_m}"
+    cached = cache.get(key)
+    if cached is not None:
+        return Response(content=cached, media_type="image/png")
+
+    try:
+        png_bytes = fetch_drainage_png(lat, lon, radius_m)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Drainage tile error: {exc}")
+
+    cache.set(key, png_bytes, expire=CACHE_TTL_SECONDS)
+    return Response(content=png_bytes, media_type="image/png")

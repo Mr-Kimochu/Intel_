@@ -1,5 +1,6 @@
 import { useState } from "react";
 import ElevationProfileChart from "./ElevationProfileChart";
+import FloodRiskCard from "./FloodRiskCard";
 
 function Stat({ label, value }) {
   return (
@@ -14,66 +15,48 @@ function OsmRow({ icon, label, value, flag }) {
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "5px 0", borderBottom: "1px solid #f0ede3", fontSize: 13,
+      padding: "5px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13,
     }}>
-      <span style={{ color: "#5c6354" }}>{icon} {label}</span>
-      <span style={{ fontWeight: 600, color: flag ? "#c0392b" : "#232620" }}>{value}</span>
+      <span style={{ color: "#6b7280" }}>{icon} {label}</span>
+      <span style={{ fontWeight: 600, color: flag ? "#ef4444" : "#111827" }}>{value}</span>
     </div>
   );
 }
 
 export default function SitePanel({
-  pin, elevation, terrain, osm, profile,
+  pin, elevation, terrain, osm, profile, floodRisk,
   loading, error, toggles,
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
-  // ── Mobile sheet handle (no-op on desktop via CSS) ──
-  const handleHandle = () => setSheetOpen((v) => !v);
+  const wrap = (children) => (
+    <div className={`side-pane${sheetOpen ? " open" : ""}`}>
+      <div className="sheet-handle" onClick={() => setSheetOpen(v => !v)} />
+      {children}
+    </div>
+  );
 
-  if (!pin) {
-    return (
-      <div className={`side-pane${sheetOpen ? " open" : ""}`}>
-        <div className="sheet-handle" onClick={handleHandle} />
-        <div className="panel placeholder">
-          <p>Click anywhere on the map to analyze a site.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (loading) {
-    return (
-      <div className={`side-pane${sheetOpen ? " open" : ""}`}>
-        <div className="sheet-handle" onClick={handleHandle} />
-        <div className="panel placeholder">
-          <p>Reading the ground at {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}…</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className={`side-pane${sheetOpen ? " open" : ""}`}>
-        <div className="sheet-handle" onClick={handleHandle} />
-        <div className="panel error"><p>{error}</p></div>
-      </div>
-    );
-  }
+  if (!pin) return wrap(
+    <div className="panel placeholder"><p>Click anywhere on the map to analyze a site.</p></div>
+  );
+  if (loading) return wrap(
+    <div className="panel placeholder"><p>Analyzing {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}…</p></div>
+  );
+  if (error) return wrap(
+    <div className="panel error"><p>{error}</p></div>
+  );
 
   const nearestWater = osm?.summary?.nearest_waterway_m;
-  const floodFlag = nearestWater != null && nearestWater < 300;
+  const floodFlag    = nearestWater != null && nearestWater < 300;
 
-  return (
-    <div className={`side-pane${sheetOpen ? " open" : ""}`}>
-      {/* ── Drag handle (visible on mobile only via CSS) ── */}
-      <div className="sheet-handle" onClick={handleHandle} />
-
-      {/* peek text shown in collapsed state on mobile */}
+  return wrap(
+    <>
+      {/* peek text on mobile when collapsed */}
       {!sheetOpen && (
         <span className="sheet-peek-label">
-          {elevation?.elevation_m != null ? `${elevation.elevation_m}m · ${terrain?.point?.slope_class ?? ""}` : "Tap for site data"}
+          {elevation?.elevation_m != null
+            ? `${elevation.elevation_m}m · ${terrain?.point?.slope_class ?? ""}`
+            : "Tap for site data"}
         </span>
       )}
 
@@ -101,34 +84,37 @@ export default function SitePanel({
           </div>
         )}
 
-        {/* ── Terrain profile chart — above OSM block ── */}
+        {/* ── Terrain profile chart ── */}
         {profile && toggles.terrainProfile && (
           <ElevationProfileChart profile={profile} />
         )}
 
-        {/* ── OSM context summary — only when toggle is on ── */}
+        {/* ── Flood risk ── */}
+        <FloodRiskCard floodRisk={floodRisk} />
+
+        {/* ── OSM context ── */}
         {osm && toggles.osmContext && (
-          <div style={{ marginTop: 20, borderTop: "1px solid #d8d6c8", paddingTop: 14 }}>
+          <div style={{ marginTop: 20, borderTop: "1px solid #e5e7eb", paddingTop: 14 }}>
             <p className="section-label">Context within {(osm.search_radius_m / 1000).toFixed(1)}km</p>
 
-            <OsmRow icon="🛣️" label="Nearest road"
+            <OsmRow label="Nearest road"
               value={osm.summary.nearest_road_m != null ? `${osm.summary.nearest_road_m}m` : "None found"} />
-            <OsmRow icon="🌊" label="Nearest waterway"
-              value={osm.summary.nearest_waterway_m != null ? `${osm.summary.nearest_waterway_m}m` : "None found"}
+            <OsmRow label="Nearest waterway"
+              value={nearestWater != null ? `${nearestWater}m` : "None found"}
               flag={floodFlag} />
-            <OsmRow icon="⚡" label="Grid power"
+            <OsmRow label="Grid power"
               value={osm.summary.grid_connected ? "Mapped nearby" : "None found"}
               flag={!osm.summary.grid_connected} />
-            <OsmRow icon="🏫" label="Amenities"
+            <OsmRow label="Amenities"
               value={`${osm.summary.amenity_count} found`} />
 
             {floodFlag && (
               <p style={{
                 margin: "10px 0 0", padding: "8px 12px",
-                background: "#fff0ee", borderLeft: "3px solid #c0392b",
-                borderRadius: "0 6px 6px 0", fontSize: 12, color: "#c0392b",
+                background: "#fef2f2", borderLeft: "3px solid #ef4444",
+                borderRadius: "0 6px 6px 0", fontSize: 12, color: "#b91c1c",
               }}>
-                ⚠️ Waterway within 300m — indicative flood risk. Commission a hydrological assessment before site works.
+                Waterway within 300m — see Flood Risk section above.
               </p>
             )}
 
@@ -137,8 +123,8 @@ export default function SitePanel({
                 <p className="section-label">Nearest roads</p>
                 {osm.roads.slice(0, 3).map((r, i) => (
                   <p key={i} style={{ margin: "3px 0", fontSize: 12 }}>
-                    <span style={{ fontWeight: 600 }}>{r.name}</span>
-                    <span style={{ color: "#5c6354" }}> · {r.type} · {r.distance_m}m</span>
+                    <strong>{r.name}</strong>
+                    <span style={{ color: "#6b7280" }}> · {r.type} · {r.distance_m}m</span>
                   </p>
                 ))}
               </div>
@@ -149,8 +135,8 @@ export default function SitePanel({
                 <p className="section-label">Nearby amenities</p>
                 {osm.amenities.slice(0, 5).map((a, i) => (
                   <p key={i} style={{ margin: "3px 0", fontSize: 12 }}>
-                    <span style={{ fontWeight: 600 }}>{a.name}</span>
-                    <span style={{ color: "#5c6354" }}> · {a.amenity} · {a.distance_m}m</span>
+                    <strong>{a.name}</strong>
+                    <span style={{ color: "#6b7280" }}> · {a.amenity} · {a.distance_m}m</span>
                   </p>
                 ))}
               </div>
@@ -158,6 +144,6 @@ export default function SitePanel({
           </div>
         )}
       </div>
-    </div>
+    </>
   );
 }
