@@ -44,7 +44,11 @@ app = FastAPI(title="Construction Site Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:5173",
+    # allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:5173",
+    allow_origins=[
+        "http://localhost:5173",
+        "https://sakinsiteintel.vercel.app",
+        ], 
     allow_methods=["GET"],
     allow_headers=["*"],
 )
