@@ -4,3 +4,5 @@ earthengine-api
 requests
 diskcache
 python-dotenv
+matplotlib
+numpy

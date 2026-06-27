@@ -1,24 +1,31 @@
+import io
 import math
 import os
 from typing import Dict, List, Optional
 
 import ee
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend — must be set before importing pyplot
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
+import numpy as np
 import requests
 from diskcache import Cache
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
+
+import json
 
 load_dotenv()
 
-EE_PROJECT = os.getenv("EE_PROJECT_ID")
 CACHE_DIR = os.getenv("CACHE_DIR", "./.cache")
-CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days — elevation never changes
+CACHE_TTL_SECONDS = 60 * 60 * 24 * 30  # 30 days
 
 cache = Cache(CACHE_DIR)
 
-# server deployments auths
-import json
+# ── Earth Engine auth ────────────────────────────────────────────────────────
 raw_key = os.getenv("EE_SERVICE_ACCOUNT_JSON")
 
 if raw_key is None:
@@ -28,25 +35,30 @@ key_dict = json.loads(raw_key)
 
 credentials = ee.ServiceAccountCredentials(
     email=key_dict["client_email"],
-    key_data=json.dumps(key_dict),   # ee accepts the full JSON string directly
+    key_data=json.dumps(key_dict),
 )
 ee.Initialize(credentials=credentials, project=key_dict["project_id"])
 
+# ── App ──────────────────────────────────────────────────────────────────────
 app = FastAPI(title="Construction Site Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
+    # allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:5173",
     allow_origins=[
         "http://localhost:5173",
         "https://sakinsiteintel.vercel.app",
-        ],  # vite dev server
+        ], 
     allow_methods=["GET"],
     allow_headers=["*"],
 )
 
-DEM = ee.Image("USGS/SRTMGL1_003")  # 30m global elevation
-SLOPE = ee.Terrain.slope(DEM)  # degrees, 0-90
-ASPECT = ee.Terrain.aspect(DEM)  # compass degrees the slope faces, 0-360
+DEM   = ee.Image("USGS/SRTMGL1_003")        # 30m global elevation
+SLOPE = ee.Terrain.slope(DEM)               # degrees, 0-90
+ASPECT= ee.Terrain.aspect(DEM)              # compass degrees the slope faces, 0-360
+MERIT = ee.Image("MERIT/Hydro/v1_0_1")     # 90m — HAND, upstream area, river mask
+HAND  = MERIT.select("hnd")                # height above nearest drainage (metres)
+UPA   = MERIT.select("upa")                # upstream contributing area (km²)
 
 
 def cache_key(lat: float, lon: float, precision: int = 4) -> str:
@@ -467,7 +479,7 @@ def get_elevation(
 def get_terrain(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    radius_m: int = Query(200, ge=20, le=1000, description="Site buffer radius in meters"),
+    radius_m: int = Query(200, ge=20, le=5000, description="Site buffer radius in meters"),
 ):
     key = f"terrain:{round(lat, 4)}:{round(lon, 4)}:{radius_m}"
     cached = cache.get(key)
@@ -487,7 +499,7 @@ def get_terrain(
 def get_terrain_profile(
     lat: float = Query(..., ge=-90, le=90),
     lon: float = Query(..., ge=-180, le=180),
-    length_m: int = Query(500, ge=50, le=2000, description="Total transect length in meters"),
+    length_m: int = Query(500, ge=50, le=5000, description="Total transect length in meters"),
 ):
     key = f"profile:{round(lat, 4)}:{round(lon, 4)}:{length_m}"
     cached = cache.get(key)
@@ -526,3 +538,432 @@ def get_osm_context(
     payload = {"lat": lat, "lon": lon, **data}
     cache.set(key, payload, expire=OSM_CACHE_TTL)
     return payload
+
+
+# ─── Phase 3.5 · DEM contours, drainage, flood risk ──────────────────────────
+
+def composite_flood_risk(hand_m: Optional[float], slope_deg: Optional[float], waterway_dist_m: Optional[int]) -> dict:
+    """
+    Three-input risk score:
+      Primary   — HAND (vertical exposure to drainage)
+      Modifier  — slope (flat land near drainage floods wider)
+      Secondary — OSM waterway proximity (catches small streams absent from MERIT 90m)
+    """
+    if hand_m is None:
+        return {
+            "level": "unknown", "label": "Insufficient data",
+            "description": "HAND data unavailable at this location. Consider commissioning a site-specific assessment.",
+            "color": "#9ca3af",
+        }
+
+    if hand_m < 5:
+        level = "high"
+    elif hand_m < 10:
+        level = "medium-high" if (slope_deg is not None and slope_deg < 5) else "medium"
+    else:
+        # Low HAND but very close OSM waterway — small stream not in MERIT model
+        level = "medium" if (waterway_dist_m is not None and waterway_dist_m < 200) else "low"
+
+    slope_note = f", {slope_deg:.1f}° slope" if slope_deg is not None else ""
+    ww_note = f" Nearest waterway {waterway_dist_m}m." if waterway_dist_m is not None else ""
+
+    LABELS = {
+        "high": (
+            "High flood risk",
+            f"Site sits only {hand_m:.1f}m above nearest drainage{slope_note}. Regularly inundated in moderate rainfall events.{ww_note} A hydrological assessment is strongly recommended before any site works.",
+            "#ef4444",
+        ),
+        "medium-high": (
+            "Medium-high flood risk",
+            f"Site is {hand_m:.1f}m above drainage on gently sloping terrain{slope_note}. Flat land amplifies inundation extent during heavy rainfall.{ww_note}",
+            "#f97316",
+        ),
+        "medium": (
+            "Moderate flood risk",
+            f"Site is {hand_m:.1f}m above nearest drainage{slope_note}.{ww_note} Risk increases during prolonged or high-intensity rainfall.",
+            "#f59e0b",
+        ),
+        "low": (
+            "Low flood risk",
+            f"Site sits {hand_m:.1f}m above nearest drainage channel{slope_note}. Low inundation risk under normal conditions.",
+            "#22c55e",
+        ),
+    }
+
+    label, description, color = LABELS[level]
+    return {"level": level, "label": label, "description": description, "color": color}
+
+
+def fetch_flood_risk(lat: float, lon: float, radius_m: int, waterway_dist_m: Optional[int]) -> dict:
+    point  = ee.Geometry.Point([lon, lat])
+    buffer = point.buffer(radius_m)
+
+    hand_point = HAND.reduceRegion(
+        reducer=ee.Reducer.first(), geometry=point, scale=90
+    ).getInfo()
+
+    hand_buffer = HAND.reduceRegion(
+        reducer=ee.Reducer.mean().combine(ee.Reducer.min(), sharedInputs=True),
+        geometry=buffer, scale=90, maxPixels=1e8,
+    ).getInfo()
+
+    slope_point = SLOPE.reduceRegion(
+        reducer=ee.Reducer.first(), geometry=point, scale=30
+    ).getInfo()
+
+    hand_m  = hand_point.get("hnd")
+    slope_d = slope_point.get("slope")
+
+    risk = composite_flood_risk(hand_m, slope_d, waterway_dist_m)
+
+    return {
+        "hand": {
+            "point_m":      round(hand_m, 1) if hand_m is not None else None,
+            "buffer_mean_m": round(hand_buffer.get("hnd_mean", 0) or 0, 1),
+            "buffer_min_m":  round(hand_buffer.get("hnd_min", 0) or 0, 1),
+        },
+        "risk": risk,
+        "inputs": {
+            "hand_m":          round(hand_m, 1) if hand_m is not None else None,
+            "slope_deg":       round(slope_d, 1) if slope_d is not None else None,
+            "waterway_dist_m": waterway_dist_m,
+        },
+    }
+
+
+def fetch_elevation_grid(lat: float, lon: float, radius_m: int) -> dict:
+    region = ee.Geometry.Point([lon, lat]).buffer(radius_m).bounds()
+
+    # Target ~40 samples across the diameter; clamp to native 30m minimum
+    scale = max(30, int((radius_m * 2) / 40))
+    dem_scaled = DEM.reproject(crs="EPSG:4326", scale=scale)
+
+    sampled   = dem_scaled.sampleRectangle(region=region, defaultValue=-9999)
+    array_2d  = sampled.get("elevation").getInfo()
+    rows      = len(array_2d)
+    cols      = len(array_2d[0]) if rows else 0
+
+    # Bounding box for georeferencing on the frontend
+    bbox = region.bounds().getInfo()["coordinates"][0]
+    west, south = bbox[0]
+    east, north = bbox[2]
+
+    return {
+        "grid":   array_2d,
+        "rows":   rows,
+        "cols":   cols,
+        "bounds": {"north": north, "south": south, "east": east, "west": west},
+        "scale_m": scale,
+        "radius_m": radius_m,
+    }
+
+
+def fetch_drainage_geojson(lat: float, lon: float, radius_m: int) -> dict:
+    """
+    Sample MERIT upstream-area raster on a grid and return channel pixels
+    as GeoJSON points. Uses ee.Image.sample() — works with Viewer permissions,
+    no thumbnail creation needed.
+    Channels defined as UPA > 10 km² (meaningful stream network).
+    """
+    region   = ee.Geometry.Point([lon, lat]).buffer(radius_m)
+    channels = UPA.updateMask(UPA.gt(10))
+
+    # Sample at ~200m spacing — gives a manageable number of points
+    # and still shows channel routing clearly at zoom 14-15
+    scale = max(200, radius_m // 10)
+
+    points = channels.sample(
+        region=region,
+        scale=scale,
+        geometries=True,
+        dropNulls=True,
+    )
+
+    raw = points.getInfo()  # returns a GeoJSON FeatureCollection
+
+    # Slim the payload — only keep coordinates and upa value
+    features = [
+        {
+            "type": "Feature",
+            "geometry": f["geometry"],
+            "properties": {"upa": round(f["properties"].get("upa", 0), 1)},
+        }
+        for f in raw.get("features", [])
+    ]
+
+    return {"type": "FeatureCollection", "features": features}
+
+
+@app.get("/elevation-grid")
+def get_elevation_grid(
+    lat:      float = Query(..., ge=-90, le=90),
+    lon:      float = Query(..., ge=-180, le=180),
+    radius_m: int   = Query(500, ge=100, le=5000),
+):
+    key    = f"grid:{round(lat, 4)}:{round(lon, 4)}:{radius_m}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = fetch_elevation_grid(lat, lon, radius_m)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GEE grid error: {exc}")
+
+    payload = {"lat": lat, "lon": lon, **data}
+    cache.set(key, payload, expire=CACHE_TTL_SECONDS)
+    return payload
+
+
+@app.get("/flood-risk")
+def get_flood_risk(
+    lat:             float = Query(..., ge=-90, le=90),
+    lon:             float = Query(..., ge=-180, le=180),
+    radius_m:        int   = Query(200, ge=50, le=5000),
+    waterway_dist_m: Optional[int] = Query(None),
+):
+    key    = f"flood:{round(lat, 4)}:{round(lon, 4)}:{radius_m}:{waterway_dist_m}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = fetch_flood_risk(lat, lon, radius_m, waterway_dist_m)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"GEE flood risk error: {exc}")
+
+    payload = {"lat": lat, "lon": lon, **data}
+    cache.set(key, payload, expire=CACHE_TTL_SECONDS)
+    return payload
+
+
+@app.get("/drainage-geojson")
+def get_drainage_geojson(
+    lat:      float = Query(..., ge=-90, le=90),
+    lon:      float = Query(..., ge=-180, le=180),
+    radius_m: int   = Query(2000, ge=500, le=5000),
+):
+    key    = f"drain:{round(lat, 4)}:{round(lon, 4)}:{radius_m}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached
+
+    try:
+        data = fetch_drainage_geojson(lat, lon, radius_m)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Drainage error: {exc}")
+
+    cache.set(key, data, expire=CACHE_TTL_SECONDS)
+    return data
+
+
+# ─── Topo PDF export ──────────────────────────────────────────────────────────
+
+def _contour_levels(grid_flat: list, interval: Optional[int] = None) -> list:
+    valid = [v for v in grid_flat if v != -9999 and not math.isnan(v)]
+    if not valid:
+        return []
+    lo, hi = min(valid), max(valid)
+    rng = hi - lo
+    if interval is None:
+        interval = 2 if rng < 30 else 5 if rng < 100 else 10 if rng < 300 else 25
+    start = math.ceil(lo / interval) * interval
+    return list(range(int(start), int(hi), interval))
+
+
+def generate_topo_pdf(lat: float, lon: float, radius_m: int, title: str) -> bytes:
+    # ── Fetch data (all cached after first pin click) ──────────────────────
+    grid_data = fetch_elevation_grid(lat, lon, radius_m)
+    try:
+        osm_data = fetch_osm_context(lat, lon)
+    except Exception:
+        osm_data = None
+
+    bounds = grid_data["bounds"]
+    rows, cols = grid_data["rows"], grid_data["cols"]
+    grid_np = np.array(grid_data["grid"], dtype=float)
+    grid_np[grid_np == -9999] = np.nan
+
+    # lon/lat axes matching the GEE sampleRectangle output (row 0 = north)
+    lon_axis = np.linspace(bounds["west"],  bounds["east"],  cols)
+    lat_axis = np.linspace(bounds["north"], bounds["south"], rows)
+
+    # ── Figure setup — A4 landscape ────────────────────────────────────────
+    fig = plt.figure(figsize=(11.69, 8.27))
+
+    # Layout: main map + right info strip
+    ax = fig.add_axes([0.06, 0.10, 0.70, 0.82])          # map frame
+    ax_info = fig.add_axes([0.78, 0.10, 0.20, 0.82])     # info strip
+    ax_info.axis("off")
+
+    # ── Contours ───────────────────────────────────────────────────────────
+    levels = _contour_levels(grid_np.flatten().tolist())
+    if levels:
+        cs = ax.contour(
+            lon_axis, lat_axis, grid_np,
+            levels=levels,
+            colors="#7B4F2E",
+            linewidths=0.6,
+        )
+        ax.clabel(cs, inline=True, fontsize=5, fmt="%dm",
+                  colors="#5a3920",
+                  inline_spacing=2)
+
+    # ── OSM roads ──────────────────────────────────────────────────────────
+    if osm_data:
+        ROAD_COLORS = {
+            "major road":     "#c0622a",
+            "secondary road": "#c0832a",
+            "local road":     "#a09070",
+            "track / path":   "#c8c0b0",
+        }
+        for road in osm_data.get("roads", []):
+            geom = road.get("geometry", [])
+            if len(geom) >= 2:
+                xs = [p["lon"] for p in geom]
+                ys = [p["lat"] for p in geom]
+                ax.plot(xs, ys, color=ROAD_COLORS.get(road["type"], "#a09070"),
+                        linewidth=0.8, solid_capstyle="round")
+
+        for ww in osm_data.get("waterways", []):
+            geom = ww.get("geometry", [])
+            if len(geom) >= 2:
+                xs = [p["lon"] for p in geom]
+                ys = [p["lat"] for p in geom]
+                ax.plot(xs, ys, color="#3a8fc7", linewidth=0.9,
+                        linestyle="--", solid_capstyle="round")
+
+        for am in osm_data.get("amenities", []):
+            COLORS = {"education": "#7b52ab", "health": "#c0392b",
+                      "emergency": "#e74c3c", "commerce": "#2ecc71"}
+            ax.plot(am["lon"], am["lat"], "o",
+                    color=COLORS.get(am["group"], "#555"),
+                    markersize=3, zorder=4)
+
+    # ── Site pin ───────────────────────────────────────────────────────────
+    ax.plot(lon, lat, "r^", markersize=7, zorder=5, label="Site")
+    ax.plot(lon, lat, "r^", markersize=7, zorder=5,
+            path_effects=[pe.withStroke(linewidth=2, foreground="white")])
+
+    # ── Axis formatting ────────────────────────────────────────────────────
+    ax.set_xlim(bounds["west"],  bounds["east"])
+    ax.set_ylim(bounds["south"], bounds["north"])
+    ax.set_xlabel("Longitude", fontsize=7)
+    ax.set_ylabel("Latitude",  fontsize=7)
+    ax.tick_params(labelsize=6)
+    ax.grid(True, linestyle=":", linewidth=0.3, alpha=0.5, color="#999")
+    for spine in ax.spines.values():
+        spine.set_linewidth(0.8)
+
+    # ── Scale bar ──────────────────────────────────────────────────────────
+    km_per_deg = 111.32 * math.cos(math.radians(lat))
+    map_width_km = (bounds["east"] - bounds["west"]) * km_per_deg
+    bar_km = max(0.1, round(map_width_km / 4, 1))
+    bar_deg = bar_km / km_per_deg
+
+    sb_x = bounds["west"]  + 0.04 * (bounds["east"] - bounds["west"])
+    sb_y = bounds["south"] + 0.04 * (bounds["north"] - bounds["south"])
+    dy   = 0.004 * (bounds["north"] - bounds["south"])
+
+    ax.fill_between([sb_x, sb_x + bar_deg / 2], [sb_y, sb_y], [sb_y + dy, sb_y + dy],
+                    color="black")
+    ax.fill_between([sb_x + bar_deg / 2, sb_x + bar_deg], [sb_y, sb_y], [sb_y + dy, sb_y + dy],
+                    color="white", edgecolor="black", linewidth=0.5)
+    ax.text(sb_x, sb_y - dy * 0.8, "0", fontsize=5, ha="center")
+    ax.text(sb_x + bar_deg, sb_y - dy * 0.8, f"{bar_km:.1f}km", fontsize=5, ha="center")
+
+    # ── North arrow ────────────────────────────────────────────────────────
+    na_x = bounds["east"]  - 0.06 * (bounds["east"] - bounds["west"])
+    na_y = bounds["north"] - 0.06 * (bounds["north"] - bounds["south"])
+    arr_len = 0.025 * (bounds["north"] - bounds["south"])
+    ax.annotate("", xy=(na_x, na_y), xytext=(na_x, na_y - arr_len),
+                arrowprops=dict(arrowstyle="-|>", color="black", lw=1.2))
+    ax.text(na_x, na_y + arr_len * 0.3, "N", ha="center", va="bottom",
+            fontsize=7, fontweight="bold")
+
+    # ── Info strip ─────────────────────────────────────────────────────────
+    info_y = 0.97
+    def info_line(text, y, size=7, bold=False, color="black"):
+        ax_info.text(0.02, y, text, transform=ax_info.transAxes,
+                     fontsize=size, fontweight="bold" if bold else "normal",
+                     color=color, va="top", wrap=True)
+
+    info_line(title, info_y, size=9, bold=True)
+    info_y -= 0.06
+    info_line(f"Lat: {lat:.5f}  Lon: {lon:.5f}", info_y, size=6.5)
+    info_y -= 0.04
+    info_line(f"Analysis radius: {radius_m}m", info_y, size=6.5)
+    info_y -= 0.04
+    info_line(f"Elevation range:", info_y, size=6.5, bold=True)
+    valid = grid_np[~np.isnan(grid_np)]
+    if valid.size:
+        info_y -= 0.035
+        info_line(f"  Min: {valid.min():.0f}m", info_y, size=6.5)
+        info_y -= 0.03
+        info_line(f"  Max: {valid.max():.0f}m", info_y, size=6.5)
+        info_y -= 0.03
+        info_line(f"  Range: {valid.max()-valid.min():.0f}m", info_y, size=6.5)
+
+    # Legend
+    info_y -= 0.07
+    info_line("Legend", info_y, size=7, bold=True)
+    legend_items = [
+        ("#7B4F2E", "─",  "Contours (5m interval)"),
+        ("#c0622a", "─",  "Major road"),
+        ("#c0832a", "─",  "Secondary road"),
+        ("#a09070", "─",  "Local road"),
+        ("#3a8fc7", "--", "Waterway"),
+        ("#ff0000", "▲",  "Site pin"),
+        ("#7b52ab", "●",  "Education"),
+        ("#c0392b", "●",  "Health facility"),
+    ]
+    for color, sym, label in legend_items:
+        info_y -= 0.04
+        ax_info.text(0.04, info_y, sym, transform=ax_info.transAxes,
+                     fontsize=8, color=color, va="top")
+        ax_info.text(0.18, info_y, label, transform=ax_info.transAxes,
+                     fontsize=6, va="top")
+
+    # Data sources footer
+    info_y -= 0.07
+    info_line("Data sources:", info_y, size=6, bold=True)
+    info_y -= 0.035
+    info_line("Elevation: SRTM 30m (NASA/USGS)", info_y, size=5.5, color="#555")
+    info_y -= 0.03
+    info_line("Context: OpenStreetMap contributors", info_y, size=5.5, color="#555")
+    info_y -= 0.03
+    info_line("Indicative use only. Not a licensed survey.", info_y, size=5.5, color="#888")
+
+    # ── Figure title + footer ──────────────────────────────────────────────
+    import datetime
+    fig.text(0.06, 0.96, title, fontsize=11, fontweight="bold", va="bottom")
+    fig.text(0.06, 0.03,
+             f"Generated by Site Intelligence · {datetime.date.today().isoformat()} · "
+             f"sakinsiteintel.vercel.app",
+             fontsize=6, color="#888")
+
+    # ── Export to PDF bytes ────────────────────────────────────────────────
+    buf = io.BytesIO()
+    fig.savefig(buf, format="pdf", dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    buf.seek(0)
+    return buf.read()
+
+
+@app.get("/topo-pdf", response_class=Response)
+def get_topo_pdf(
+    lat:      float = Query(..., ge=-90,   le=90),
+    lon:      float = Query(..., ge=-180,  le=180),
+    radius_m: int   = Query(500, ge=100,   le=2500),
+    title:    str   = Query("Site Topographic Map"),
+):
+    try:
+        pdf_bytes = generate_topo_pdf(lat, lon, radius_m, title)
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"PDF generation error: {exc}")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="site_topo_{round(lat,4)}_{round(lon,4)}.pdf"'},
+    )
