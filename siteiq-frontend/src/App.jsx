@@ -1,4 +1,5 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback } from "react";
+import { Analytics } from "@vercel/analytics/react";
 import MapView from "./components/MapView";
 import SitePanel from "./components/SitePanel";
 import LayersMenu from "./components/LayersMenu";
@@ -140,6 +141,7 @@ export default function App() {
         <span>·</span>
         <span>Open source · Data: OSM, NASA, ESA, MERIT</span>
       </footer>
+      <Analytics />
     </div>
   );
 }
