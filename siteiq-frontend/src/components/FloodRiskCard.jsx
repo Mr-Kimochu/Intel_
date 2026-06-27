@@ -24,7 +24,7 @@ function Row({ label, value }) {
   );
 }
 
-// Show a clear "waiting" state if data hasn't arrived yet
+// Show a clear "waiting" state if data hasn't arrived yets
 function EmptyCard() {
   return (
     <div style={{ marginTop: 18, borderTop: "1px solid #e5e7eb", paddingTop: 14 }}>
