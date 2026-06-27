@@ -47,7 +47,7 @@ app.add_middleware(
     # allow_origin_regex=r"https://.*\.vercel\.app|http://localhost:5173",
     allow_origins=[
         "http://localhost:5173",
-        "https://geositeintel.vercel.app/",
+        "https://geositeintel.vercel.app",
         "https://sakinsiteintel.vercel.app",
         ], 
     allow_methods=["GET"],
