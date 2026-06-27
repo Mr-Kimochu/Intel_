@@ -1,6 +1,8 @@
 import { useState } from "react";
 import ElevationProfileChart from "./ElevationProfileChart";
 import FloodRiskCard from "./FloodRiskCard";
+import ExtentSelector from "./ExtentSelector";
+import ExportButton from "./ExportButton";
 
 function Stat({ label, value }) {
   return (
@@ -11,13 +13,13 @@ function Stat({ label, value }) {
   );
 }
 
-function OsmRow({ icon, label, value, flag }) {
+function OsmRow({ label, value, flag }) {
   return (
     <div style={{
       display: "flex", justifyContent: "space-between", alignItems: "center",
       padding: "5px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13,
     }}>
-      <span style={{ color: "#6b7280" }}>{icon} {label}</span>
+      <span style={{ color: "#6b7280" }}>{label}</span>
       <span style={{ fontWeight: 600, color: flag ? "#ef4444" : "#111827" }}>{value}</span>
     </div>
   );
@@ -25,7 +27,7 @@ function OsmRow({ icon, label, value, flag }) {
 
 export default function SitePanel({
   pin, elevation, terrain, osm, profile, floodRisk,
-  loading, error, toggles,
+  loading, error, toggles, extent, onExtentChange,
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -37,11 +39,17 @@ export default function SitePanel({
   );
 
   if (!pin) return wrap(
-    <div className="panel placeholder"><p>Click anywhere on the map to analyze a site.</p></div>
+    <div className="panel placeholder">
+      <p>Click anywhere on the map to analyze a site.</p>
+    </div>
   );
+
   if (loading) return wrap(
-    <div className="panel placeholder"><p>Analyzing {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}…</p></div>
+    <div className="panel placeholder">
+      <p>Analyzing {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}…</p>
+    </div>
   );
+
   if (error) return wrap(
     <div className="panel error"><p>{error}</p></div>
   );
@@ -51,7 +59,7 @@ export default function SitePanel({
 
   return wrap(
     <>
-      {/* peek text on mobile when collapsed */}
+      {/* Mobile peek strip */}
       {!sheetOpen && (
         <span className="sheet-peek-label">
           {elevation?.elevation_m != null
@@ -61,9 +69,13 @@ export default function SitePanel({
       )}
 
       <div className="panel">
+
         {/* ── Location ── */}
         <h2>{elevation?.place_name || "Selected site"}</h2>
         <p className="coords">{pin.lat.toFixed(5)}, {pin.lon.toFixed(5)}</p>
+
+        {/* ── Extent selector ── */}
+        <ExtentSelector value={extent} onChange={onExtentChange} />
 
         {/* ── Terrain stats ── */}
         <div className="stat-grid">
@@ -79,8 +91,14 @@ export default function SitePanel({
         {terrain?.site_buffer && (
           <div className="site-buffer">
             <h3>Within {terrain.site_buffer.radius_m}m</h3>
-            <p>Elevation range: {terrain.site_buffer.elevation_min_m?.toFixed(0)}–{terrain.site_buffer.elevation_max_m?.toFixed(0)} m</p>
-            <p>Avg slope: {terrain.site_buffer.slope_mean_deg?.toFixed(1)}°, max {terrain.site_buffer.slope_max_deg?.toFixed(1)}°</p>
+            <p>
+              Elevation range: {terrain.site_buffer.elevation_min_m?.toFixed(0)}–
+              {terrain.site_buffer.elevation_max_m?.toFixed(0)} m
+            </p>
+            <p>
+              Avg slope: {terrain.site_buffer.slope_mean_deg?.toFixed(1)}°,
+              max {terrain.site_buffer.slope_max_deg?.toFixed(1)}°
+            </p>
           </div>
         )}
 
@@ -95,18 +113,29 @@ export default function SitePanel({
         {/* ── OSM context ── */}
         {osm && toggles.osmContext && (
           <div style={{ marginTop: 20, borderTop: "1px solid #e5e7eb", paddingTop: 14 }}>
-            <p className="section-label">Context within {(osm.search_radius_m / 1000).toFixed(1)}km</p>
+            <p className="section-label">
+              Context within {(osm.search_radius_m / 1000).toFixed(1)}km
+            </p>
 
-            <OsmRow label="Nearest road"
-              value={osm.summary.nearest_road_m != null ? `${osm.summary.nearest_road_m}m` : "None found"} />
-            <OsmRow label="Nearest waterway"
+            <OsmRow
+              label="Nearest road"
+              value={osm.summary.nearest_road_m != null
+                ? `${osm.summary.nearest_road_m}m` : "None found"}
+            />
+            <OsmRow
+              label="Nearest waterway"
               value={nearestWater != null ? `${nearestWater}m` : "None found"}
-              flag={floodFlag} />
-            <OsmRow label="Grid power"
+              flag={floodFlag}
+            />
+            <OsmRow
+              label="Grid power"
               value={osm.summary.grid_connected ? "Mapped nearby" : "None found"}
-              flag={!osm.summary.grid_connected} />
-            <OsmRow label="Amenities"
-              value={`${osm.summary.amenity_count} found`} />
+              flag={!osm.summary.grid_connected}
+            />
+            <OsmRow
+              label="Amenities"
+              value={`${osm.summary.amenity_count} found`}
+            />
 
             {floodFlag && (
               <p style={{
@@ -143,6 +172,19 @@ export default function SitePanel({
             )}
           </div>
         )}
+
+        {/* ── PDF export ── */}
+        <ExportButton pin={pin} radiusM={extent} />
+
+        {/* ── Disclaimer ── */}
+        <p style={{
+          margin: "16px 0 0", fontSize: 10, color: "#9ca3af",
+          lineHeight: 1.5, borderTop: "1px solid #f3f4f6", paddingTop: 10,
+        }}>
+          Indicative data only. Not a substitute for a licensed site survey.
+          Data: SRTM (NASA/USGS), OSM contributors, MERIT Hydro.
+        </p>
+
       </div>
     </>
   );

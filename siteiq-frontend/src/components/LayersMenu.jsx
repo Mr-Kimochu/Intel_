@@ -2,10 +2,9 @@ import { useState, useRef, useEffect } from "react";
 
 const LAYERS = [
   { key: "osmContext",      label: "OSM Context",        description: "Roads, waterways, amenities" },
-  { key: "elevationBuffer", label: "Elevation Buffer",    description: "200m site analysis radius" },
+  { key: "elevationBuffer", label: "Elevation Buffer",    description: "Site analysis radius" },
   { key: "terrainProfile",  label: "Terrain Profile",     description: "N–S / E–W transect arms" },
-  { key: "contours",        label: "Elevation Contours",  description: "DEM-derived contour lines" },
-  { key: "drainage",        label: "Drainage Network",    description: "Upstream channel network" },
+  { key: "contours",        label: "Elevation Contours",  description: "DEM-derived contour lines (brown)" },
 ];
 
 export default function LayersMenu({ toggles, onToggle }) {

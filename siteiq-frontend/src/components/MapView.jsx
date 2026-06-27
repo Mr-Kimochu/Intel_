@@ -3,9 +3,8 @@ import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
 import OsmOverlay, { OsmLegend } from "./OsmOverlay";
-import LocationControl from "./LocationControl.jsx";
+import LocationControl from "./LocationControl";
 import ContourLayer from "./ContourLayer";
-import DrainageOverlay from "./DrainageOverlay";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -91,7 +90,7 @@ export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles,
         {toggles.osmContext      && <OsmOverlay osm={osm} />}
 
         {/* Phase 3.5 layers */}
-        {toggles.drainage  && <DrainageOverlay pin={pin} radiusM={2000} />}
+        {toggles.drainage  && <DrainageOverlay drainageData={drainageData} />}
         {toggles.contours  && <ContourLayer gridData={elevGrid} />}
       </MapContainer>
 

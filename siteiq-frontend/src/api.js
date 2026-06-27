@@ -35,9 +35,3 @@ export async function getElevationGrid(lat, lon, radiusM = 500) {
   const { data } = await client.get("/elevation-grid", { params: { lat, lon, radius_m: radiusM } });
   return data;
 }
-
-// Drainage tile is served as a PNG — return the URL string for use in ImageOverlay.
-// The component constructs it directly so no axios call needed here.
-export function drainageTileUrl(lat, lon, radiusM = 2000) {
-  return `${API_BASE}/drainage-tile?lat=${lat}&lon=${lon}&radius_m=${radiusM}`;
-}

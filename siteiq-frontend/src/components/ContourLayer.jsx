@@ -23,11 +23,14 @@ function transformContour(contour, bounds, cols, rows) {
   };
 }
 
-// Neutral gray palette: darker = higher elevation
+// Brown topo palette: lighter = lower, darker = higher
 function elevColor(elev, min, max) {
   const t = Math.max(0, Math.min(1, (elev - min) / (max - min)));
-  const v = Math.round(180 - t * 130);  // 180 (light) → 50 (dark)
-  return `rgb(${v},${v},${v})`;
+  // Interpolate from #d4a96a (light brown) to #5a3014 (dark brown)
+  const r = Math.round(212 - t * (212 - 90));
+  const g = Math.round(169 - t * (169 - 48));
+  const b = Math.round(106 - t * (106 - 20));
+  return `rgb(${r},${g},${b})`;
 }
 
 export default function ContourLayer({ gridData }) {
@@ -72,7 +75,7 @@ export default function ContourLayer({ gridData }) {
       data={geojson}
       style={(f) => ({
         color:       elevColor(f.properties.elevation, f.properties.minElev, f.properties.maxElev),
-        weight:      1,
+        weight:      1.2,
         fillOpacity: 0,
         opacity:     0.75,
       })}
