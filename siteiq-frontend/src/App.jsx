@@ -1,11 +1,12 @@
 import { useState, useCallback } from "react";
-import { Analytics } from "@vercel/analytics/react";
 import MapView from "./components/MapView";
 import SitePanel from "./components/SitePanel";
 import LayersMenu from "./components/LayersMenu";
+import FeedbackButton from "./components/FeedbackButton";
 import {
   getElevation, getTerrain, getTerrainProfile,
   getOsmContext, getFloodRisk, getElevationGrid,
+  getClimateSolar, getSoil, getLandCover, getLandUseSuitability,
 } from "./api";
 import "./App.css";
 
@@ -14,86 +15,116 @@ const DEFAULT_TOGGLES = {
   elevationBuffer: true,
   terrainProfile:  true,
   contours:        false,
+  landCover:       false,
+  soilMap:         false,
 };
 
+const settle = (p, tag) =>
+  p.then(v => v).catch(e => { console.warn(`${tag}:`, e?.message); return null; });
+
 export default function App() {
-  const [pin,       setPin]       = useState(null);
-  const [elevation, setElevation] = useState(null);
-  const [terrain,   setTerrain]   = useState(null);
-  const [profile,   setProfile]   = useState(null);
-  const [osm,       setOsm]       = useState(null);
-  const [floodRisk, setFloodRisk] = useState(null);
-  const [elevGrid,  setElevGrid]  = useState(null);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState(null);
-  const [toggles,   setToggles]   = useState(DEFAULT_TOGGLES);
-  const [extent,    setExtent]    = useState(500);   // radius in metres
+  const [pin,          setPin]          = useState(null);
+  const [elevation,    setElevation]    = useState(null);
+  const [terrain,      setTerrain]      = useState(null);
+  const [profile,      setProfile]      = useState(null);
+  const [osm,          setOsm]          = useState(null);
+  const [floodRisk,    setFloodRisk]    = useState(null);
+  const [elevGrid,     setElevGrid]     = useState(null);
+  const [climateSolar, setClimateSolar] = useState(null);
+  const [soil,         setSoil]         = useState(null);
+  const [landCover,    setLandCover]    = useState(null);
+  const [suitability,  setSuitability]  = useState(null);
+  const [toggles,      setToggles]      = useState(DEFAULT_TOGGLES);
+  const [extent,       setExtent]       = useState(500);
+
+  // Per-section loading
+  const [terrainLoading, setTerrainLoading] = useState(false);
+  const [riskLoading,    setRiskLoading]    = useState(false);
+  const [osmLoading,     setOsmLoading]     = useState(false);
+  const [climateLoading, setClimateLoading] = useState(false);
+  const [soilLoading,    setSoilLoading]    = useState(false);
+  const [lcLoading,      setLcLoading]      = useState(false);
+
+  // Per-section errors
+  const [riskError,    setRiskError]    = useState(false);
+  const [osmError,     setOsmError]     = useState(false);
+  const [climateError, setClimateError] = useState(false);
+  const [soilError,    setSoilError]    = useState(false);
+  const [lcError,      setLcError]      = useState(false);
 
   const handleToggle = useCallback((key) => {
     setToggles(prev => ({ ...prev, [key]: !prev[key] }));
   }, []);
 
-  const fetchSite = useCallback(async (lat, lon, radiusM) => {
-    setLoading(true);
-    setError(null);
-    setElevation(null); setTerrain(null); setProfile(null);
-    setOsm(null); setFloodRisk(null); setElevGrid(null);
+  const fetchSite = useCallback((lat, lon, radiusM) => {
+    // Reset
+    setElevation(null); setTerrain(null);  setProfile(null);
+    setOsm(null);       setFloodRisk(null); setElevGrid(null);
+    setClimateSolar(null); setSoil(null);
+    setLandCover(null); setSuitability(null);
+    setRiskError(false); setOsmError(false);
+    setClimateError(false); setSoilError(false); setLcError(false);
 
-    const ok = (r, tag) => {
-      if (r.status === "fulfilled") return r.value;
-      console.warn(`${tag} failed:`, r.reason?.message ?? r.reason);
-      return null;
-    };
+    setTerrainLoading(true); setRiskLoading(true);
+    setOsmLoading(true);     setClimateLoading(true);
+    setSoilLoading(true);    setLcLoading(true);
 
-    try {
-      // Wave 1 — fast, always needed
-      const w1 = await Promise.allSettled([
-        getElevation(lat, lon),
-        getTerrain(lat, lon, radiusM),
-        getTerrainProfile(lat, lon, Math.min(radiusM * 2, 5000)),
-      ]);
-      const elevData    = ok(w1[0], "elevation");
-      const terrainData = ok(w1[1], "terrain");
-      const profileData = ok(w1[2], "profile");
-      setElevation(elevData);
-      setTerrain(terrainData);
-      setProfile(profileData);
+    // ── Wave 1: terrain ──────────────────────────────────────────
+    Promise.allSettled([
+      getElevation(lat, lon),
+      getTerrain(lat, lon, radiusM),
+      getTerrainProfile(lat, lon, Math.min(radiusM * 2, 5000)),
+    ]).then(([e, t, p]) => {
+      if (e.status === "fulfilled") setElevation(e.value);
+      if (t.status === "fulfilled") setTerrain(t.value);
+      if (p.status === "fulfilled") setProfile(p.value);
+      setTerrainLoading(false);
+    });
 
-      // Wave 2 — slower, all independent
-      const w2 = await Promise.allSettled([
-        getOsmContext(lat, lon),
-        getFloodRisk(lat, lon, radiusM, null),
-        getElevationGrid(lat, lon, radiusM),
-      ]);
-      const osmData   = ok(w2[0], "osm");
-      const floodData = ok(w2[1], "flood");
-      const gridData  = ok(w2[2], "grid");
-      setOsm(osmData);
-      setElevGrid(gridData);
+    // Elevation grid (contours — silent)
+    settle(getElevationGrid(lat, lon, radiusM), "grid").then(setElevGrid);
 
-      // Always set flood risk — refine with waterway distance if OSM succeeded
-      const wDist = osmData?.summary?.nearest_waterway_m ?? null;
-      if (osmData && wDist !== null) {
-        const w3 = await Promise.allSettled([getFloodRisk(lat, lon, radiusM, wDist)]);
-        setFloodRisk(ok(w3[0], "flood-refined") ?? floodData);
-      } else {
-        setFloodRisk(floodData);  // always set even if OSM failed
-      }
+    // ── Independent fetches ───────────────────────────────────────
+    settle(getFloodRisk(lat, lon, radiusM, null), "flood")
+      .then(d => { setFloodRisk(d); if (!d) setRiskError(true); setRiskLoading(false); });
 
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setLoading(false);
-    }
+    settle(getSoil(lat, lon), "soil")
+      .then(d => { setSoil(d); if (!d) setSoilError(true); setSoilLoading(false); });
+
+    settle(getClimateSolar(lat, lon), "climate")
+      .then(d => { setClimateSolar(d); if (!d) setClimateError(true); setClimateLoading(false); });
+
+    // Land cover + suitability together
+    settle(getLandCover(lat, lon, radiusM), "landcover")
+      .then(d => {
+        setLandCover(d);
+        if (!d) { setLcError(true); setLcLoading(false); return; }
+        setLcLoading(false);
+        // Fire suitability with what we have (terrain from wave 1 may not be done yet — pass nulls, will refine)
+        settle(getLandUseSuitability(lat, lon, {
+          dominant_class: d.dominant_class,
+        }), "suitability").then(setSuitability);
+      });
+
+    // ── OSM → refine flood risk ───────────────────────────────────
+    settle(getOsmContext(lat, lon, Math.max(radiusM, 500)), "osm")
+      .then(d => {
+        setOsm(d);
+        if (!d) { setOsmError(true); setOsmLoading(false); return; }
+        setOsmLoading(false);
+        const wDist = d?.summary?.nearest_waterway_m ?? null;
+        if (wDist !== null) {
+          settle(getFloodRisk(lat, lon, radiusM, wDist), "flood-refined")
+            .then(d2 => { if (d2) setFloodRisk(d2); });
+        }
+      });
   }, []);
 
-  // New pin → fetch
   const handlePick = useCallback((lat, lon) => {
     setPin({ lat, lon });
     fetchSite(lat, lon, extent);
   }, [extent, fetchSite]);
 
-  // Extent change with existing pin → re-fetch extent-sensitive endpoints
   const handleExtentChange = useCallback((newExtent) => {
     setExtent(newExtent);
     if (pin) fetchSite(pin.lat, pin.lon, newExtent);
@@ -103,8 +134,8 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="app-header-title">
-          <h1>Site Intelligence</h1>
-          <span className="app-header-sub">Of Course We'll Have A Look :)</span>
+          <h1>Site Intel</h1>
+          <span className="app-header-sub">Understanding land before changing it</span>
         </div>
         <LayersMenu toggles={toggles} onToggle={handleToggle} />
       </header>
@@ -112,26 +143,23 @@ export default function App() {
       <div className="app-body">
         <div className="map-pane">
           <MapView
-            pin={pin}
-            osm={osm}
-            terrain={terrain}
-            profile={profile}
-            elevGrid={elevGrid}
-            toggles={toggles}
+            pin={pin} osm={osm} terrain={terrain}
+            profile={profile} elevGrid={elevGrid}
+            toggles={toggles} extent={extent}
             onPick={handlePick}
           />
         </div>
         <SitePanel
-          pin={pin}
-          elevation={elevation}
-          terrain={terrain}
-          osm={osm}
-          profile={profile}
-          floodRisk={floodRisk}
-          loading={loading}
-          error={error}
-          toggles={toggles}
-          extent={extent}
+          pin={pin} elevation={elevation} terrain={terrain}
+          osm={osm} profile={profile} floodRisk={floodRisk}
+          climateSolar={climateSolar} soil={soil}
+          landCover={landCover} suitability={suitability}
+          terrainLoading={terrainLoading} riskLoading={riskLoading}
+          osmLoading={osmLoading} climateLoading={climateLoading}
+          soilLoading={soilLoading} lcLoading={lcLoading}
+          riskError={riskError} osmError={osmError}
+          climateError={climateError} soilError={soilError} lcError={lcError}
+          toggles={toggles} extent={extent}
           onExtentChange={handleExtentChange}
         />
       </div>
@@ -139,9 +167,9 @@ export default function App() {
       <footer className="app-footer">
         <span>Made by <a href="mailto:sakindeborah@outlook.com">Sakin</a> · 2026</span>
         <span>·</span>
-        <span>Open source · Data: OSM, NASA, ESA, MERIT</span>
+        <span>OSM, NASA, ESA WorldCover, MERIT, iSDAsoil</span>
       </footer>
-      <Analytics />
+      <FeedbackButton />
     </div>
   );
 }

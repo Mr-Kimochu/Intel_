@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents, Circle, Polyline, useMap } from "react-leaflet";
 import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
@@ -5,6 +6,8 @@ import L from "leaflet";
 import OsmOverlay, { OsmLegend } from "./OsmOverlay";
 import LocationControl from "./LocationControl";
 import ContourLayer from "./ContourLayer";
+import LandCoverOverlay from "./LandCoverOverlay";
+import { SoilImageLayer, SoilControls } from "./SoilMapOverlay";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -48,7 +51,10 @@ function ElevationBufferOverlay({ pin, terrain }) {
     <Circle
       center={[pin.lat, pin.lon]}
       radius={terrain.site_buffer.radius_m}
-      pathOptions={{ color: "#374151", fillColor: "#374151", fillOpacity: 0.07, weight: 1.5, dashArray: "5 4" }}
+      pathOptions={{
+        color: "#374151", fillColor: "#374151",
+        fillOpacity: 0.07, weight: 1.5, dashArray: "5 4",
+      }}
     />
   );
 }
@@ -70,31 +76,54 @@ function TerrainProfileOverlay({ pin, profile }) {
   );
 }
 
-export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles, onPick }) {
+export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles, extent, onPick }) {
   const center = pin ? [pin.lat, pin.lon] : [-3.45, 38.35];
+
+  // soilLayer state lives here so it can be shared between
+  // SoilImageLayer (inside MapContainer) and SoilControls (outside)
+  const [soilLayer, setSoilLayer] = useState("clay");
 
   return (
     <div style={{ position: "relative", height: "100%", width: "100%" }}>
-      <MapContainer center={center} zoom={pin ? 14 : 10} style={{ height: "100%", width: "100%" }} zoomControl={false}>
+
+      {/* ── Leaflet map ─────────────────────────────────────────────── */}
+      <MapContainer
+        center={center}
+        zoom={pin ? 14 : 10}
+        style={{ height: "100%", width: "100%" }}
+        zoomControl={false}
+      >
         <TileLayer
-          attribution='&copy; OpenStreetMap contributors'
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
         />
         <ClickHandler onPick={onPick} />
         <FlyToPin pin={pin} />
         {pin && <Marker position={[pin.lat, pin.lon]} />}
 
-        {/* existing layers */}
+        {/* Terrain */}
         {toggles.elevationBuffer && <ElevationBufferOverlay pin={pin} terrain={terrain} />}
         {toggles.terrainProfile  && <TerrainProfileOverlay pin={pin} profile={profile} />}
-        {toggles.osmContext      && <OsmOverlay osm={osm} />}
+        {toggles.contours        && <ContourLayer gridData={elevGrid} />}
 
-        {/* Phase 3.5 layers */}
-        {toggles.drainage  && <DrainageOverlay drainageData={drainageData} />}
-        {toggles.contours  && <ContourLayer gridData={elevGrid} />}
+        {/* OSM */}
+        {toggles.osmContext && <OsmOverlay osm={osm} />}
+
+        {/* Land cover — ImageOverlay must be inside MapContainer */}
+        {toggles.landCover && pin && (
+          <LandCoverOverlay pin={pin} radiusM={extent ?? 500} />
+        )}
+
       </MapContainer>
 
+      {/* ── Overlays outside MapContainer (plain HTML, no Leaflet context) ── */}
+
+
+
+      {/* GPS locate button */}
       <LocationControl onLocate={onPick} />
+
+      {/* OSM legend */}
       {osm && toggles.osmContext && <OsmLegend />}
     </div>
   );

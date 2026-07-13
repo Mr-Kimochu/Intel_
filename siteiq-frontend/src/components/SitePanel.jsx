@@ -1,33 +1,67 @@
 import { useState } from "react";
+import Section from "./Section";
 import ElevationProfileChart from "./ElevationProfileChart";
 import FloodRiskCard from "./FloodRiskCard";
+import SoilCard from "./SoilCard";
+import ClimateChart from "./ClimateChart";
+import SolarCard from "./SolarCard";
+import LandCoverCard from "./LandCoverCard";
 import ExtentSelector from "./ExtentSelector";
 import ExportButton from "./ExportButton";
 
-function Stat({ label, value }) {
+function OsmGroup({ title, items, renderItem }) {
+  const [open, setOpen] = useState(false);
+  if (!items?.length) return null;
   return (
-    <div className="stat">
-      <span className="stat-label">{label}</span>
-      <span className="stat-value">{value}</span>
+    <div style={{ borderTop: "1px solid #f3f4f6" }}>
+      <div onClick={() => setOpen(v => !v)} style={{
+        display: "flex", justifyContent: "space-between", alignItems: "center",
+        padding: "8px 0", cursor: "pointer", fontSize: 12,
+      }}>
+        <span style={{ fontWeight: 500, color: "#374151" }}>{title}</span>
+        <span style={{ color: "#9ca3af" }}>
+          {items.length}&nbsp;
+          <svg style={{ verticalAlign: "middle" }} width="10" height="10" viewBox="0 0 10 10" fill="none">
+            <path d={open ? "M2 7L5 3L8 7" : "M2 3L5 7L8 3"}
+              stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
+        </span>
+      </div>
+      {open && (
+        <div style={{ paddingBottom: 8, paddingLeft: 4 }}>
+          {items.slice(0, 6).map(renderItem)}
+        </div>
+      )}
     </div>
   );
 }
 
-function OsmRow({ label, value, flag }) {
+function Item({ primary, secondary }) {
   return (
-    <div style={{
-      display: "flex", justifyContent: "space-between", alignItems: "center",
-      padding: "5px 0", borderBottom: "1px solid #f3f4f6", fontSize: 13,
-    }}>
-      <span style={{ color: "#6b7280" }}>{label}</span>
-      <span style={{ fontWeight: 600, color: flag ? "#ef4444" : "#111827" }}>{value}</span>
-    </div>
+    <p style={{ margin: "3px 0", fontSize: 12 }}>
+      <span style={{ fontWeight: 500, color: "#111827" }}>{primary}</span>
+      {secondary && <span style={{ color: "#9ca3af" }}> · {secondary}</span>}
+    </p>
   );
 }
+
+// Summary one-liners
+const summaries = {
+  terrain:   (elev, terrain) => [elev?.elevation_m != null ? `${elev.elevation_m}m` : null, terrain?.point?.slope_class].filter(Boolean).join(" · ") || null,
+  risk:      (fr)  => fr?.risk ? `${(fr.risk.level ?? "").toUpperCase()} · ${fr.risk.label ?? ""}` : null,
+  soil:      (s)   => s?.texture ? s.texture.class_name : null,
+  climate:   (c)   => c?.summary ? `${c.summary.annual_rainfall_mm}mm/yr · ${c.summary.wet_months?.length ?? 0} wet months` : null,
+  solar:     (c)   => c?.summary ? `${(c.summary.solar_viability ?? "").toUpperCase()} · ${c.summary.annual_solar_ghi} kWh/m²/day` : null,
+  lc:        (lc)  => lc?.dominant_label ? `Dominant: ${lc.dominant_label}` : null,
+  osm:       (o)   => o?.summary ? `Road ${o.summary.nearest_road_m ?? "—"}m · ${o.summary.amenity_count ?? 0} amenities` : null,
+};
 
 export default function SitePanel({
   pin, elevation, terrain, osm, profile, floodRisk,
-  loading, error, toggles, extent, onExtentChange,
+  climateSolar, soil, landCover, suitability,
+  terrainLoading, riskLoading, osmLoading, climateLoading, soilLoading, lcLoading,
+  riskError, osmError, climateError, soilError, lcError,
+  toggles, extent, onExtentChange,
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -39,19 +73,15 @@ export default function SitePanel({
   );
 
   if (!pin) return wrap(
-    <div className="panel placeholder">
-      <p>Click anywhere on the map to analyze a site.</p>
+    <div className="panel">
+      <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 16px", lineHeight: 1.5 }}>
+        Set your analysis radius, then click the map to analyze a site.
+      </p>
+      <ExtentSelector value={extent} onChange={onExtentChange} />
+      <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 8 }}>
+        You can also tap "Use my location" on the map.
+      </p>
     </div>
-  );
-
-  if (loading) return wrap(
-    <div className="panel placeholder">
-      <p>Analyzing {pin.lat.toFixed(4)}, {pin.lon.toFixed(4)}…</p>
-    </div>
-  );
-
-  if (error) return wrap(
-    <div className="panel error"><p>{error}</p></div>
   );
 
   const nearestWater = osm?.summary?.nearest_waterway_m;
@@ -59,132 +89,116 @@ export default function SitePanel({
 
   return wrap(
     <>
-      {/* Mobile peek strip */}
       {!sheetOpen && (
         <span className="sheet-peek-label">
           {elevation?.elevation_m != null
             ? `${elevation.elevation_m}m · ${terrain?.point?.slope_class ?? ""}`
-            : "Tap for site data"}
+            : terrainLoading ? "Analyzing…" : "Tap to view results"}
         </span>
       )}
 
       <div className="panel">
-
-        {/* ── Location ── */}
-        <h2>{elevation?.place_name || "Selected site"}</h2>
+        <h2>{elevation?.place_name || `${pin.lat.toFixed(4)}, ${pin.lon.toFixed(4)}`}</h2>
         <p className="coords">{pin.lat.toFixed(5)}, {pin.lon.toFixed(5)}</p>
 
-        {/* ── Extent selector ── */}
         <ExtentSelector value={extent} onChange={onExtentChange} />
 
-        {/* ── Terrain stats ── */}
-        <div className="stat-grid">
-          <Stat label="Elevation" value={`${elevation?.elevation_m ?? "—"} m`} />
-          <Stat label="Slope"     value={`${terrain?.point?.slope_deg?.toFixed(1) ?? "—"}°`} />
-          <Stat label="Aspect"    value={`${terrain?.point?.aspect_deg?.toFixed(0) ?? "—"}°`} />
-        </div>
-
-        {terrain?.point?.slope_class && (
-          <p className="callout">{terrain.point.slope_class}</p>
-        )}
-
-        {terrain?.site_buffer && (
-          <div className="site-buffer">
-            <h3>Within {terrain.site_buffer.radius_m}m</h3>
-            <p>
-              Elevation range: {terrain.site_buffer.elevation_min_m?.toFixed(0)}–
-              {terrain.site_buffer.elevation_max_m?.toFixed(0)} m
-            </p>
-            <p>
-              Avg slope: {terrain.site_buffer.slope_mean_deg?.toFixed(1)}°,
-              max {terrain.site_buffer.slope_max_deg?.toFixed(1)}°
-            </p>
+        {/* ── Terrain ── */}
+        <Section title="Terrain" summary={summaries.terrain(elevation, terrain)}
+          loading={terrainLoading} loadingText="Fetching elevation and slope…" defaultOpen={true}>
+          <div className="stat-grid">
+            <div className="stat">
+              <span className="stat-label">Elevation</span>
+              <span className="stat-value">{elevation?.elevation_m ?? "—"} m</span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Slope</span>
+              <span className="stat-value">{terrain?.point?.slope_deg?.toFixed(1) ?? "—"}°</span>
+            </div>
+            <div className="stat">
+              <span className="stat-label">Aspect</span>
+              <span className="stat-value">{terrain?.point?.aspect_deg?.toFixed(0) ?? "—"}°</span>
+            </div>
           </div>
-        )}
+          {terrain?.point?.slope_class && <p className="callout">{terrain.point.slope_class}</p>}
+          {terrain?.site_buffer && (
+            <div className="site-buffer">
+              <h3>Within {terrain.site_buffer.radius_m}m</h3>
+              <p>Elevation {terrain.site_buffer.elevation_min_m?.toFixed(0)}–{terrain.site_buffer.elevation_max_m?.toFixed(0)} m</p>
+              <p>Avg slope {terrain.site_buffer.slope_mean_deg?.toFixed(1)}°, max {terrain.site_buffer.slope_max_deg?.toFixed(1)}°</p>
+            </div>
+          )}
+          {profile && toggles.terrainProfile && <ElevationProfileChart profile={profile} />}
+        </Section>
 
-        {/* ── Terrain profile chart ── */}
-        {profile && toggles.terrainProfile && (
-          <ElevationProfileChart profile={profile} />
-        )}
+        {/* ── Flood Risk ── */}
+        <Section title="Flood Risk" summary={summaries.risk(floodRisk)}
+          loading={riskLoading} loadingText="Computing HAND flood model…" error={riskError}>
+          <FloodRiskCard floodRisk={floodRisk} />
+        </Section>
 
-        {/* ── Flood risk ── */}
-        <FloodRiskCard floodRisk={floodRisk} />
+        {/* ── Soil ── */}
+        <Section title="Soil Properties" summary={summaries.soil(soil)}
+          loading={soilLoading} loadingText="Querying iSDAsoil…" error={soilError}>
+          <SoilCard soil={soil} />
+        </Section>
 
-        {/* ── OSM context ── */}
-        {osm && toggles.osmContext && (
-          <div style={{ marginTop: 20, borderTop: "1px solid #e5e7eb", paddingTop: 14 }}>
-            <p className="section-label">
-              Context within {(osm.search_radius_m / 1000).toFixed(1)}km
-            </p>
+        {/* ── Land Cover ── */}
+        <Section title="Land Cover" summary={summaries.lc(landCover)}
+          loading={lcLoading} loadingText="Fetching ESA WorldCover…" error={lcError}>
+          <LandCoverCard landCover={landCover} suitability={suitability} />
+        </Section>
 
-            <OsmRow
-              label="Nearest road"
-              value={osm.summary.nearest_road_m != null
-                ? `${osm.summary.nearest_road_m}m` : "None found"}
-            />
-            <OsmRow
-              label="Nearest waterway"
-              value={nearestWater != null ? `${nearestWater}m` : "None found"}
-              flag={floodFlag}
-            />
-            <OsmRow
-              label="Grid power"
-              value={osm.summary.grid_connected ? "Mapped nearby" : "None found"}
-              flag={!osm.summary.grid_connected}
-            />
-            <OsmRow
-              label="Amenities"
-              value={`${osm.summary.amenity_count} found`}
-            />
+        {/* ── Climate ── */}
+        <Section title="Rainfall & Temperature" summary={summaries.climate(climateSolar)}
+          loading={climateLoading} loadingText="Fetching NASA POWER data…" error={climateError}>
+          <ClimateChart climate={climateSolar} />
+        </Section>
 
-            {floodFlag && (
-              <p style={{
-                margin: "10px 0 0", padding: "8px 12px",
-                background: "#fef2f2", borderLeft: "3px solid #ef4444",
-                borderRadius: "0 6px 6px 0", fontSize: 12, color: "#b91c1c",
-              }}>
-                Waterway within 300m — see Flood Risk section above.
+        {/* ── Solar ── */}
+        <Section title="Solar Potential" summary={summaries.solar(climateSolar)}
+          loading={climateLoading} loadingText="Fetching NASA POWER data…" error={climateError}>
+          <SolarCard climate={climateSolar} />
+        </Section>
+
+        {/* ── OSM Context ── */}
+        <Section title="Site Context" summary={summaries.osm(osm)}
+          loading={osmLoading} loadingText="Querying OpenStreetMap…" error={osmError}>
+          {osm && (
+            <>
+              {floodFlag && (
+                <p style={{ margin: "0 0 10px", padding: "7px 10px", background: "#fef2f2",
+                  borderLeft: "3px solid #ef4444", borderRadius: "0 6px 6px 0", fontSize: 12, color: "#b91c1c" }}>
+                  Waterway within 300m — see Flood Risk above.
+                </p>
+              )}
+              <p className="section-label" style={{ marginBottom: 0 }}>
+                Within {(osm.search_radius_m / 1000).toFixed(1)}km
               </p>
-            )}
+              <OsmGroup title="Roads" items={osm.roads}
+                renderItem={(r, i) => <Item key={i} primary={r.name} secondary={`${r.type} · ${r.distance_m}m`} />} />
+              <OsmGroup title="Waterways" items={osm.waterways}
+                renderItem={(w, i) => <Item key={i} primary={w.name} secondary={`${w.type} · ${w.distance_m}m`} />} />
+              <OsmGroup title="Amenities" items={osm.amenities}
+                renderItem={(a, i) => <Item key={i} primary={a.name} secondary={`${a.amenity} · ${a.distance_m}m`} />} />
+              <OsmGroup title="Buildings" items={osm.buildings ?? []}
+                renderItem={(b, i) => <Item key={i} primary={b.name || b.type} secondary={`${b.distance_m}m`} />} />
+              <OsmGroup title="Vegetation / Land use" items={osm.vegetation ?? []}
+                renderItem={(v, i) => <Item key={i} primary={v.name || v.type} secondary={`${v.raw_tag} · ${v.distance_m}m`} />} />
+              <OsmGroup title="Power infrastructure" items={osm.power ?? []}
+                renderItem={(p, i) => <Item key={i} primary={p.type}
+                  secondary={p.voltage ? `${p.voltage}V · ${p.distance_m}m` : `${p.distance_m}m`} />} />
+            </>
+          )}
+        </Section>
 
-            {osm.roads.length > 0 && (
-              <div style={{ marginTop: 12 }}>
-                <p className="section-label">Nearest roads</p>
-                {osm.roads.slice(0, 3).map((r, i) => (
-                  <p key={i} style={{ margin: "3px 0", fontSize: 12 }}>
-                    <strong>{r.name}</strong>
-                    <span style={{ color: "#6b7280" }}> · {r.type} · {r.distance_m}m</span>
-                  </p>
-                ))}
-              </div>
-            )}
+        <ExportButton pin={pin} radiusM={extent} floodRisk={floodRisk} soil={soil} climateSolar={climateSolar} />
 
-            {osm.amenities.length > 0 && (
-              <div style={{ marginTop: 10 }}>
-                <p className="section-label">Nearby amenities</p>
-                {osm.amenities.slice(0, 5).map((a, i) => (
-                  <p key={i} style={{ margin: "3px 0", fontSize: 12 }}>
-                    <strong>{a.name}</strong>
-                    <span style={{ color: "#6b7280" }}> · {a.amenity} · {a.distance_m}m</span>
-                  </p>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* ── PDF export ── */}
-        <ExportButton pin={pin} radiusM={extent} />
-
-        {/* ── Disclaimer ── */}
-        <p style={{
-          margin: "16px 0 0", fontSize: 10, color: "#9ca3af",
-          lineHeight: 1.5, borderTop: "1px solid #f3f4f6", paddingTop: 10,
-        }}>
+        <p style={{ margin: "16px 0 0", fontSize: 10, color: "#9ca3af", lineHeight: 1.5,
+          borderTop: "1px solid #f3f4f6", paddingTop: 10 }}>
           Indicative data only. Not a substitute for a licensed site survey.
-          Data: SRTM (NASA/USGS), OSM contributors, MERIT Hydro.
+          Sources: SRTM, OSM, MERIT, iSDAsoil, ESA WorldCover, NASA POWER.
         </p>
-
       </div>
     </>
   );
