@@ -8,6 +8,7 @@ import SolarCard from "./SolarCard";
 import LandCoverCard from "./LandCoverCard";
 import ExtentSelector from "./ExtentSelector";
 import ExportButton from "./ExportButton";
+import SaveAnalysis from "./SaveAnalysis";
 
 function OsmGroup({ title, items, renderItem }) {
   const [open, setOpen] = useState(false);
@@ -62,6 +63,7 @@ export default function SitePanel({
   terrainLoading, riskLoading, osmLoading, climateLoading, soilLoading, lcLoading,
   riskError, osmError, climateError, soilError, lcError,
   toggles, extent, onExtentChange,
+  user,
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 

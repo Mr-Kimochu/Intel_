@@ -1,8 +1,11 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import MapView from "./components/MapView";
 import SitePanel from "./components/SitePanel";
 import LayersMenu from "./components/LayersMenu";
 import FeedbackButton from "./components/FeedbackButton";
+import AuthButton from "./components/AuthButton";
+import SavedAnalyses from "./components/SavedAnalyses";
+import { supabase } from "./lib/supabase";
 import {
   getElevation, getTerrain, getTerrainProfile,
   getOsmContext, getFloodRisk, getElevationGrid,
@@ -36,6 +39,28 @@ export default function App() {
   const [suitability,  setSuitability]  = useState(null);
   const [toggles,      setToggles]      = useState(DEFAULT_TOGGLES);
   const [extent,       setExtent]       = useState(500);
+
+  // ── Auth state ────────────────────────────────────────────────────────────
+  const [user,    setUser]    = useState(null);
+  const [session, setSession] = useState(null);
+
+  useEffect(() => {
+    // Restore existing session on page load (handles post-OAuth redirect)
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+    });
+
+    // Keep state in sync on sign-in / sign-out / token refresh
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // Per-section loading
   const [terrainLoading, setTerrainLoading] = useState(false);
@@ -130,14 +155,50 @@ export default function App() {
     if (pin) fetchSite(pin.lat, pin.lon, newExtent);
   }, [pin, fetchSite]);
 
+  /**
+   * Restores the full panel from a saved analysis row returned by GET /analyses/:id.
+   * Sets all data state directly — no API re-fetch needed.
+   */
+  const handleLoadAnalysis = useCallback((data) => {
+    const site = data.sites ?? {};
+
+    // Restore pin from site coordinates
+    setPin({ lat: site.lat ?? data.lat, lon: site.lon ?? data.lon });
+    setExtent(data.radius_m ?? 500);
+
+    // Restore each data layer
+    setElevation(data.elevation   ?? null);
+    setTerrain(data.terrain       ?? null);
+    setProfile(null);                          // profile not saved — will re-fetch if needed
+    setFloodRisk(data.flood_risk  ?? null);
+    setSoil(data.soil             ?? null);
+    setClimateSolar(data.climate_solar ?? null);
+    setLandCover(data.land_cover  ?? null);
+    setOsm(data.osm_context       ?? null);
+    setSuitability(null);
+    setElevGrid(null);
+
+    // Clear all loading + error states
+    setTerrainLoading(false); setRiskLoading(false);
+    setOsmLoading(false);     setClimateLoading(false);
+    setSoilLoading(false);    setLcLoading(false);
+    setRiskError(false);      setOsmError(false);
+    setClimateError(false);   setSoilError(false);   setLcError(false);
+  }, []);
+
   return (
     <div className="app">
       <header className="app-header">
         <div className="app-header-title">
-          <h1>Site Intel</h1>
-          <span className="app-header-sub">Understanding land before changing it</span>
+          <h1>Construction Site Intelligence</h1>
+          <span className="app-header-sub">Drop a pin · get answers, not datasets</span>
         </div>
-        <LayersMenu toggles={toggles} onToggle={handleToggle} />
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {/* Saved analyses drawer — only visible when signed in */}
+          <SavedAnalyses user={user} onLoadAnalysis={handleLoadAnalysis} />
+          <LayersMenu toggles={toggles} onToggle={handleToggle} />
+          <AuthButton user={user} onSignOut={() => { setUser(null); setSession(null); }} />
+        </div>
       </header>
 
       <div className="app-body">
@@ -161,11 +222,12 @@ export default function App() {
           climateError={climateError} soilError={soilError} lcError={lcError}
           toggles={toggles} extent={extent}
           onExtentChange={handleExtentChange}
+          user={user}
         />
       </div>
 
       <footer className="app-footer">
-        <span>Made by <a href="mailto:sakindeborah@outlook.com">Sakin</a> · 2026</span>
+        <span>Made by <a href="mailto:sakin@example.com">Sakin</a> · 2026</span>
         <span>·</span>
         <span>OSM, NASA, ESA WorldCover, MERIT, iSDAsoil</span>
       </footer>
