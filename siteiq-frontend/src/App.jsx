@@ -196,7 +196,7 @@ export default function App() {
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* Saved analyses drawer — only visible when signed in */}
           <SavedAnalyses user={user} onLoadAnalysis={handleLoadAnalysis} />
-          <LayersMenu toggles={toggles} onToggle={handleToggle} />
+          <LayersMenu toggles={toggles} onToggle={handleToggle} user={user} />
           <AuthButton user={user} onSignOut={() => { setUser(null); setSession(null); }} />
         </div>
       </header>
