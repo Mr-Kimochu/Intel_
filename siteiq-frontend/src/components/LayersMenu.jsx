@@ -1,15 +1,15 @@
 import { useState, useRef, useEffect } from "react";
 
 const LAYERS = [
-  { key: "osmContext",      label: "OSM Context",       description: "Roads, waterways, amenities"    },
-  { key: "elevationBuffer", label: "Elevation Buffer",   description: "Site analysis radius ring"      },
-  { key: "terrainProfile",  label: "Terrain Profile",    description: "N–S / E–W transect arms"        },
-  { key: "contours",        label: "Elevation Contours", description: "DEM-derived contour lines"      },
-  { key: "landCover",       label: "Land Cover",         description: "ESA WorldCover 10m overlay"     },
-
+  { key: "osmContext",      label: "OSM Context",       description: "Roads, waterways, amenities",     gated: false },
+  { key: "elevationBuffer", label: "Elevation Buffer",   description: "Site analysis radius ring",       gated: false },
+  { key: "terrainProfile",  label: "Terrain Profile",    description: "N–S / E–W transect arms",         gated: false },
+  { key: "contours",        label: "Elevation Contours", description: "DEM-derived contour lines",       gated: false },
+  { key: "landCover",       label: "Land Cover",         description: "ESA WorldCover 10m overlay",     gated: true  },
+  { key: "soilMap",         label: "Soil Map",           description: "iSDAsoil property overlay",      gated: true  },
 ];
 
-export default function LayersMenu({ toggles, onToggle }) {
+export default function LayersMenu({ toggles, onToggle, user }) {
   const [open, setOpen] = useState(false);
   const ref = useRef(null);
 
@@ -68,29 +68,36 @@ export default function LayersMenu({ toggles, onToggle }) {
           }}>
             Map Layers
           </p>
-          {LAYERS.map(({ key, label, description }) => (
-            <label
-              key={key}
-              style={{
-                display: "flex", alignItems: "center", gap: 10,
-                padding: "10px 14px", cursor: "pointer",
-                borderBottom: "1px solid #f9fafb", transition: "background 0.1s",
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = "#f9fafb"}
-              onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-            >
-              <input
-                type="checkbox"
-                checked={!!toggles[key]}
-                onChange={() => onToggle(key)}
-                style={{ width: 15, height: 15, accentColor: "#374151", cursor: "pointer", flexShrink: 0 }}
-              />
-              <div>
-                <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "#111827" }}>{label}</p>
-                <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>{description}</p>
-              </div>
-            </label>
-          ))}
+          {LAYERS.map(({ key, label, description, gated }) => {
+            const locked = gated && !user;
+            return (
+              <label
+                key={key}
+                style={{
+                  display: "flex", alignItems: "center", gap: 10,
+                  padding: "10px 14px", cursor: locked ? "default" : "pointer",
+                  borderBottom: "1px solid #f9fafb", transition: "background 0.1s",
+                  opacity: locked ? 0.6 : 1,
+                }}
+                onMouseEnter={e => !locked && (e.currentTarget.style.background = "#f9fafb")}
+                onMouseLeave={e => (e.currentTarget.style.background = "transparent")}
+                title={locked ? "Sign in to unlock this layer" : undefined}
+              >
+                <input
+                  type="checkbox"
+                  checked={!!toggles[key]}
+                  disabled={locked}
+                  onChange={() => !locked && onToggle(key)}
+                  style={{ width: 15, height: 15, accentColor: "#374151", cursor: locked ? "not-allowed" : "pointer", flexShrink: 0 }}
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 500, color: "#111827" }}>{label}</p>
+                  <p style={{ margin: 0, fontSize: 11, color: "#9ca3af" }}>{description}</p>
+                </div>
+                {locked && <span style={{ fontSize: 12, flexShrink: 0 }}>🔒</span>}
+              </label>
+            );
+          })}
         </div>
       )}
     </div>

@@ -35,7 +35,7 @@ async function downloadPdf(url, filename) {
   URL.revokeObjectURL(link.href);
 }
 
-export default function ExportButton({ pin, radiusM, floodRisk, soil, climateSolar }) {
+export default function ExportButton({ pin, radiusM, floodRisk, soil, climateSolar, user }) {
   const [open,    setOpen]    = useState(false);
   const [title,   setTitle]   = useState("Site Intelligence Report");
   const [loading, setLoading] = useState(null);
@@ -113,15 +113,29 @@ export default function ExportButton({ pin, radiusM, floodRisk, soil, climateSol
             </div>
           </button>
 
-          <button onClick={handleReport} disabled={!!loading} style={btnStyle("#374151", !!loading)}>
-            {loading === "report" ? <Spinner /> : <DownloadIcon />}
-            <div>
-              <div>Full Site Report PDF</div>
-              <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400 }}>
-                4 pages · topo + terrain + flood/soil + climate/solar
+          {user ? (
+            <button onClick={handleReport} disabled={!!loading} style={btnStyle("#374151", !!loading)}>
+              {loading === "report" ? <Spinner /> : <DownloadIcon />}
+              <div>
+                <div>Full Site Report PDF</div>
+                <div style={{ fontSize: 10, color: "#9ca3af", fontWeight: 400 }}>
+                  4 pages · topo + terrain + flood/soil + climate/solar
+                </div>
               </div>
+            </button>
+          ) : (
+            <div style={{
+              display: "flex", alignItems: "center", justifyContent: "space-between",
+              padding: "10px 12px", background: "#f9fafb",
+              border: "1px dashed #e5e7eb", borderRadius: 7,
+            }}>
+              <div>
+                <p style={{ margin: 0, fontSize: 12, fontWeight: 500, color: "#374151" }}>Full Site Report PDF</p>
+                <p style={{ margin: 0, fontSize: 10, color: "#9ca3af" }}>Sign in to unlock · 4 pages</p>
+              </div>
+              <span style={{ fontSize: 16 }}>🔒</span>
             </div>
-          </button>
+          )}
 
           {error && <p style={{ fontSize: 12, color: "#ef4444", margin: 0 }}>{error}</p>}
 
