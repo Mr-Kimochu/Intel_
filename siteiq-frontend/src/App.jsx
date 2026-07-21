@@ -190,8 +190,8 @@ export default function App() {
     <div className="app">
       <header className="app-header">
         <div className="app-header-title">
-          <h1>Construction Site Intelligence</h1>
-          <span className="app-header-sub">Drop a pin · get answers, not datasets</span>
+          <h1>Site Intel</h1>
+          <span className="app-header-sub">Understand land before changing it</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* Saved analyses drawer — only visible when signed in */}
@@ -227,7 +227,7 @@ export default function App() {
       </div>
 
       <footer className="app-footer">
-        <span>Made by <a href="mailto:sakin@example.com">Sakin</a> · 2026</span>
+        <span>Made by <a href="mailto:sakindeborah@outlook.com">PiedCrow</a> · 2026</span>
         <span>·</span>
         <span>OSM, NASA, ESA WorldCover, MERIT, iSDAsoil</span>
       </footer>
