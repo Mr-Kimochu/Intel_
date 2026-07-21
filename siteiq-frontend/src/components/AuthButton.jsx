@@ -16,19 +16,17 @@ export default function AuthButton({ user, onSignOut }) {
   const [loading, setLoading] = useState(false);
 
   async function handleSignIn() {
-    setLoading(true);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "google",
-      options: {
-        redirectTo: window.location.origin,
-      },
-    });
-    if (error) {
-      console.error("Sign in error:", error.message);
-      setLoading(false);
-    }
-    // On success the page redirects — setLoading stays true intentionally
+  setLoading(true);
+  const redirectTo = import.meta.env.VITE_APP_URL || window.location.origin;
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: { redirectTo },
+  });
+  if (error) {
+    console.error("Sign in error:", error.message);
+    setLoading(false);
   }
+}
 
   async function handleSignOut() {
     await supabase.auth.signOut();
