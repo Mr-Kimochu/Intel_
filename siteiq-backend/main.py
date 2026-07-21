@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import climate, flood, health, landcover, osm, report, soil, terrain, auth, sites, analyses
 from app.dependencies import CORS_ALLOW_ORIGIN_REGEX
 
-app = FastAPI(title="Construction Site Intelligence API")
+app = FastAPI(title="Site Intelligence API")
 
 app.add_middleware(
     CORSMiddleware,
