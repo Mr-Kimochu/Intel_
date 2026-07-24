@@ -486,3 +486,23 @@ body {
 .location-search--light .location-search-results {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
 }
+
+/* ── Location search — panel variant (used in SitePanel, above radius selector) ── */
+.location-search--panel { margin-bottom: 14px; }
+
+.location-search--panel .location-search-input {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 13px;
+  height: 34px;
+}
+
+.location-search--panel .location-search-input::placeholder { color: #9ca3af; }
+
+.location-search--panel .location-search-input:focus {
+  border-color: var(--color-accent);
+  background: #fff;
+}
+
+.location-search--panel .location-search-loading { color: var(--color-text-muted); }
