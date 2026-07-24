@@ -1,12 +1,12 @@
 import { useState, useRef, useEffect } from "react";
 
 const LAYERS = [
-  { key: "osmContext",      label: "OSM Context",       description: "Roads, waterways, amenities",     gated: false },
+  { key: "osmContext",      label: "OSM Context",       description: "Roads, waterways, amenities",     gated: true },
   { key: "elevationBuffer", label: "Elevation Buffer",   description: "Site analysis radius ring",       gated: false },
   { key: "terrainProfile",  label: "Terrain Profile",    description: "N–S / E–W transect arms",         gated: false },
   { key: "contours",        label: "Elevation Contours", description: "DEM-derived contour lines",       gated: false },
   { key: "landCover",       label: "Land Cover",         description: "ESA WorldCover 10m overlay",     gated: true  },
-  { key: "soilMap",         label: "Soil Map",           description: "iSDAsoil property overlay",      gated: true  },
+
 ];
 
 export default function LayersMenu({ toggles, onToggle, user }) {
