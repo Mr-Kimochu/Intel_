@@ -1,8 +1,6 @@
 import { useState } from "react";
 import Modal from "./Modal";
-import { getAuthHeader } from "../lib/supabase";
-
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
+import { saveAnalysis } from "../api";
 
 function SaveIcon() {
   return (
@@ -23,13 +21,10 @@ export default function SaveAnalysis({
   const [siteName, setSiteName] = useState("");
   const [notes,    setNotes]    = useState("");
   const [status,   setStatus]   = useState("idle"); // idle | saving | saved | error
-  const [savedId,  setSavedId]  = useState(null);
   const [errMsg,   setErrMsg]   = useState("");
 
-  // Only show the button when signed in and an analysis exists
   if (!user || !pin || !elevation) return null;
 
-  // Pre-fill site name from reverse geocode if available
   const defaultName = elevation?.place_name
     ? elevation.place_name.split(",").slice(0, 2).join(", ")
     : `${pin.lat.toFixed(4)}, ${pin.lon.toFixed(4)}`;
@@ -39,7 +34,6 @@ export default function SaveAnalysis({
     setNotes("");
     setStatus("idle");
     setErrMsg("");
-    setSavedId(null);
     setOpen(true);
   }
 
@@ -47,38 +41,25 @@ export default function SaveAnalysis({
     if (!siteName.trim()) return;
     setStatus("saving");
     setErrMsg("");
-
     try {
-      const headers = await getAuthHeader();
-      const resp = await fetch(`${API_BASE}/analyses`, {
-        method:  "POST",
-        headers: { "Content-Type": "application/json", ...headers },
-        body: JSON.stringify({
-          site_name:    siteName.trim(),
-          notes:        notes.trim() || null,
-          lat:          pin.lat,
-          lon:          pin.lon,
-          radius_m:     extent,
-          elevation,
-          terrain,
-          flood_risk:   floodRisk,
-          soil,
-          climate_solar: climateSolar,
-          land_cover:   landCover,
-          osm_context:  osm,
-        }),
+      await saveAnalysis({
+        site_name:     siteName.trim(),
+        notes:         notes.trim() || null,
+        lat:           pin.lat,
+        lon:           pin.lon,
+        radius_m:      extent,
+        elevation,
+        terrain,
+        flood_risk:    floodRisk,
+        soil,
+        climate_solar: climateSolar,
+        land_cover:    landCover,
+        osm_context:   osm,
       });
-
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || `HTTP ${resp.status}`);
-      }
-
-      const data = await resp.json();
-      setSavedId(data.analysis_id);
       setStatus("saved");
     } catch (e) {
-      setErrMsg(e.message);
+      const msg = e?.response?.data?.detail ?? e.message ?? "Unknown error";
+      setErrMsg(msg);
       setStatus("error");
     }
   }
@@ -89,12 +70,11 @@ export default function SaveAnalysis({
         onClick={handleOpen}
         style={{
           display: "flex", alignItems: "center", gap: 6,
-          padding: "7px 12px", marginTop: 10,
+          padding: "8px 12px", marginTop: 10,
           background: "#1f2937", color: "#fff",
           border: "none", borderRadius: 7,
           fontSize: 12, fontFamily: "var(--font-body)", fontWeight: 500,
-          cursor: "pointer", width: "100%",
-          justifyContent: "center",
+          cursor: "pointer", width: "100%", justifyContent: "center",
         }}
       >
         <SaveIcon /> Save this analysis
@@ -107,8 +87,8 @@ export default function SaveAnalysis({
             <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>
               Saved as "{siteName}"
             </p>
-            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 20 }}>
-              You can reload this analysis any time from your saved sites.
+            <p style={{ fontSize: 12, color: "#6b7280", marginBottom: 20, lineHeight: 1.5 }}>
+              Reload this analysis any time from the Saved drawer in the header.
             </p>
             <button
               onClick={() => setOpen(false)}
@@ -123,8 +103,12 @@ export default function SaveAnalysis({
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Site name */}
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 }}>
+              <label style={{
+                fontSize: 11, fontWeight: 600, color: "#374151",
+                display: "block", marginBottom: 5,
+              }}>
                 Site name *
               </label>
               <input
@@ -139,14 +123,18 @@ export default function SaveAnalysis({
               />
             </div>
 
+            {/* Notes */}
             <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: "#374151", display: "block", marginBottom: 5 }}>
+              <label style={{
+                fontSize: 11, fontWeight: 600, color: "#374151",
+                display: "block", marginBottom: 5,
+              }}>
                 Notes (optional)
               </label>
               <textarea
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
-                placeholder="Any observations, next steps, or context…"
+                placeholder="Observations, next steps, or context…"
                 rows={3}
                 style={{
                   width: "100%", padding: "8px 10px",
@@ -157,23 +145,26 @@ export default function SaveAnalysis({
               />
             </div>
 
-            {/* Summary of what gets saved */}
+            {/* Summary */}
             <div style={{
-              background: "#f9fafb", borderRadius: 6, padding: "10px 12px",
-              fontSize: 11, color: "#6b7280", lineHeight: 1.6,
+              background: "#f9fafb", borderRadius: 6,
+              padding: "10px 12px", fontSize: 11,
+              color: "#6b7280", lineHeight: 1.6,
               border: "1px solid #e5e7eb",
             }}>
-              Saving: {pin.lat.toFixed(5)}, {pin.lon.toFixed(5)} · {extent}m radius
-              {elevation?.elevation_m != null && ` · ${elevation.elevation_m}m elevation`}
-              {floodRisk?.risk?.level && ` · ${floodRisk.risk.level} flood risk`}
+              {pin.lat.toFixed(5)}, {pin.lon.toFixed(5)} · {extent}m radius
+              {elevation?.elevation_m != null && ` · ${elevation.elevation_m}m`}
+              {floodRisk?.risk?.level && ` · flood risk ${floodRisk.risk.level}`}
             </div>
 
+            {/* Error */}
             {errMsg && (
               <p style={{ fontSize: 12, color: "#ef4444", margin: 0 }}>
                 Save failed: {errMsg}
               </p>
             )}
 
+            {/* Actions */}
             <div style={{ display: "flex", gap: 8 }}>
               <button
                 onClick={handleSave}
@@ -191,9 +182,10 @@ export default function SaveAnalysis({
               <button
                 onClick={() => setOpen(false)}
                 style={{
-                  padding: "9px 16px", background: "#f3f4f6", color: "#374151",
-                  border: "1px solid #e5e7eb", borderRadius: 7,
-                  fontSize: 13, fontFamily: "var(--font-body)", cursor: "pointer",
+                  padding: "9px 16px", background: "#f3f4f6",
+                  color: "#374151", border: "1px solid #e5e7eb",
+                  borderRadius: 7, fontSize: 13,
+                  fontFamily: "var(--font-body)", cursor: "pointer",
                 }}
               >
                 Cancel
