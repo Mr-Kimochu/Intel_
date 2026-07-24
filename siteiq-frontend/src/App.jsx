@@ -193,7 +193,7 @@ export default function App() {
           <h1>Site Intel</h1>
           <span className="app-header-sub">Understand land before changing it</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
           {/* Saved analyses drawer — only visible when signed in */}
           <SavedAnalyses user={user} onLoadAnalysis={handleLoadAnalysis} />
           <LayersMenu toggles={toggles} onToggle={handleToggle} user={user} />
