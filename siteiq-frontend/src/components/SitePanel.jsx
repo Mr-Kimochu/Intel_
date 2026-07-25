@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SignInCTA } from "./SignInPrompt";
 import Section from "./Section";
 import ElevationProfileChart from "./ElevationProfileChart";
 import FloodRiskCard from "./FloodRiskCard";
@@ -80,6 +81,7 @@ export default function SitePanel({
         Set your analysis radius, then click the map to analyze a site.
       </p>
       <ExtentSelector value={extent} onChange={onExtentChange} />
+      {!user && <SignInCTA />}
       <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 8 }}>
         You can also tap "Use my location" on the map.
       </p>

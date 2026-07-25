@@ -1,10 +1,11 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import MapView from "./components/MapView";
 import SitePanel from "./components/SitePanel";
 import LayersMenu from "./components/LayersMenu";
 import FeedbackButton from "./components/FeedbackButton";
 import AuthButton from "./components/AuthButton";
 import SavedAnalyses from "./components/SavedAnalyses";
+import { SignInModal } from "./components/SignInPrompt";
 import { supabase } from "./lib/supabase";
 import {
   getElevation, getTerrain, getTerrainProfile,
@@ -41,8 +42,10 @@ export default function App() {
   const [extent,       setExtent]       = useState(500);
 
   // ── Auth state ────────────────────────────────────────────────────────────
-  const [user,    setUser]    = useState(null);
-  const [session, setSession] = useState(null);
+  const [user,           setUser]           = useState(null);
+  const [session,        setSession]        = useState(null);
+  const [showSignInModal,setShowSignInModal] = useState(false);
+  const hasPrompted                          = useRef(false);
 
   useEffect(() => {
     // Restore existing session on page load (handles post-OAuth redirect)
@@ -61,6 +64,10 @@ export default function App() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  useEffect(() => {
+    if (user) setShowSignInModal(false);
+  }, [user]);
 
   // Per-section loading
   const [terrainLoading, setTerrainLoading] = useState(false);
@@ -104,6 +111,12 @@ export default function App() {
       if (t.status === "fulfilled") setTerrain(t.value);
       if (p.status === "fulfilled") setProfile(p.value);
       setTerrainLoading(false);
+
+      // Show sign-in prompt once per session after first real results
+      if (!user && !hasPrompted.current) {
+        hasPrompted.current = true;
+        setTimeout(() => setShowSignInModal(true), 1500); // small delay feels natural
+      }
     });
 
     // Elevation grid (contours — silent)
@@ -193,7 +206,7 @@ export default function App() {
           <h1>Site Intel</h1>
           <span className="app-header-sub">Understand land before changing it</span>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           {/* Saved analyses drawer — only visible when signed in */}
           <SavedAnalyses user={user} onLoadAnalysis={handleLoadAnalysis} />
           <LayersMenu toggles={toggles} onToggle={handleToggle} user={user} />
@@ -227,11 +240,12 @@ export default function App() {
       </div>
 
       <footer className="app-footer">
-        <span>Made by <a href="mailto:sakindeborah@outlook.com">PiedCrow</a> · 2026</span>
+        <span>Made by <a href="mailto:sakin@example.com">Sakin</a> · 2026</span>
         <span>·</span>
         <span>OSM, NASA, ESA WorldCover, MERIT, iSDAsoil</span>
       </footer>
       <FeedbackButton />
+      <SignInModal open={showSignInModal} onClose={() => setShowSignInModal(false)} />
     </div>
   );
 }
