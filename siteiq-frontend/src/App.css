@@ -63,9 +63,96 @@ body {
   display: flex;
   align-items: baseline;
   gap: 10px;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
   overflow: hidden;
+}
+
+/* ── Location search ───────────────────────────────────────────────────── */
+.location-search {
+  position: relative;
+  flex: 1;
+  max-width: 320px;
+  min-width: 0;
+}
+
+.location-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #4b5563;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+}
+
+.location-search-input::placeholder { color: #9ca3af; }
+
+.location-search-input:focus {
+  border-color: var(--color-accent);
+  background: #fff;
+  color: var(--color-text);
+}
+
+.location-search-loading {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.location-search-results {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 2000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  list-style: none;
+}
+
+.location-search-results li {
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.location-search-results li:last-child { border-bottom: none; }
+.location-search-results li:hover { background: var(--color-bg); }
+
+/* ── Location search — light variant (used on map overlay) ──────────────── */
+.location-search--light .location-search-input {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.10);
+  backdrop-filter: blur(4px);
+  font-size: 12px;
+  height: 34px;
+}
+
+.location-search--light .location-search-input::placeholder { color: #9ca3af; }
+
+.location-search--light .location-search-input:focus {
+  border-color: var(--color-accent);
+  background: #fff;
+}
+
+.location-search--light .location-search-loading { color: #6b7280; }
+
+.location-search--light .location-search-results {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
 }
 
 .app-header h1 {
@@ -328,6 +415,8 @@ body {
   .stat { padding: 7px 8px; }
   .stat-grid { gap: 6px; }
   .panel h2 { font-size: 13px; }
+  .location-search { max-width: 140px; }
+  .location-search-input { font-size: 12px; padding: 0 8px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
