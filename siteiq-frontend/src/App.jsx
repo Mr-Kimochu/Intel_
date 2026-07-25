@@ -222,6 +222,7 @@ export default function App() {
           climateError={climateError} soilError={soilError} lcError={lcError}
           toggles={toggles} extent={extent}
           onExtentChange={handleExtentChange}
+          onPick={handlePick}
           user={user}
         />
       </div>

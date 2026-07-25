@@ -8,6 +8,7 @@ import SolarCard from "./SolarCard";
 import LandCoverCard from "./LandCoverCard";
 import ExtentSelector from "./ExtentSelector";
 import ExportButton from "./ExportButton";
+import LocationSearch from "./LocationSearch";
 import SaveAnalysis from "./SaveAnalysis";
 
 function OsmGroup({ title, items, renderItem }) {
@@ -62,8 +63,7 @@ export default function SitePanel({
   climateSolar, soil, landCover, suitability,
   terrainLoading, riskLoading, osmLoading, climateLoading, soilLoading, lcLoading,
   riskError, osmError, climateError, soilError, lcError,
-  toggles, extent, onExtentChange,
-  user,
+  toggles, extent, onExtentChange, onPick, user,
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -79,6 +79,7 @@ export default function SitePanel({
       <p style={{ fontSize: 13, color: "#6b7280", margin: "0 0 16px", lineHeight: 1.5 }}>
         Set your analysis radius, then click the map to analyze a site.
       </p>
+      <LocationSearch onSelect={onPick} variant="panel" />
       <ExtentSelector value={extent} onChange={onExtentChange} />
       <p style={{ fontSize: 11, color: "#9ca3af", marginTop: 8 }}>
         You can also tap "Use my location" on the map.
@@ -103,6 +104,7 @@ export default function SitePanel({
         <h2>{elevation?.place_name || `${pin.lat.toFixed(4)}, ${pin.lon.toFixed(4)}`}</h2>
         <p className="coords">{pin.lat.toFixed(5)}, {pin.lon.toFixed(5)}</p>
 
+        <LocationSearch onSelect={onPick} variant="panel" />
         <ExtentSelector value={extent} onChange={onExtentChange} />
 
         {/* ── Terrain ── */}

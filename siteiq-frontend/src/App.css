@@ -491,3 +491,107 @@ body {
   .app-header h1 { font-size: 17px; }
   .stat-value { font-size: 18px; }
 }
+/* ── Location search (used inside LocationControl on the map) ───────────── */
+.location-search {
+  position: relative;
+  width: 100%;
+}
+
+.location-search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid #4b5563;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  font-family: var(--font-body);
+  font-size: 13px;
+  outline: none;
+}
+
+.location-search-input::placeholder { color: #9ca3af; }
+
+.location-search-input:focus {
+  border-color: var(--color-accent);
+  background: #fff;
+  color: var(--color-text);
+}
+
+.location-search-loading {
+  position: absolute;
+  right: 10px;
+  top: 8px;
+  font-size: 11px;
+  color: #9ca3af;
+}
+
+.location-search-results {
+  position: absolute;
+  top: 38px;
+  left: 0;
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  max-height: 260px;
+  overflow-y: auto;
+  z-index: 2000;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  list-style: none;
+}
+
+.location-search-results li {
+  padding: 9px 12px;
+  font-size: 13px;
+  color: var(--color-text);
+  cursor: pointer;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.location-search-results li:last-child { border-bottom: none; }
+.location-search-results li:hover { background: var(--color-bg); }
+
+/* ── Location search — light variant (used on map overlay) ──────────────── */
+.location-search--light .location-search-input {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e5e7eb;
+  color: #1f2937;
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.10);
+  backdrop-filter: blur(4px);
+  font-size: 12px;
+  height: 34px;
+}
+
+.location-search--light .location-search-input::placeholder { color: #9ca3af; }
+
+.location-search--light .location-search-input:focus {
+  border-color: var(--color-accent);
+  background: #fff;
+}
+
+.location-search--light .location-search-loading { color: #6b7280; }
+
+.location-search--light .location-search-results {
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.14);
+}
+
+/* ── Location search — panel variant (used in SitePanel, above radius selector) ── */
+.location-search--panel { margin-bottom: 14px; }
+
+.location-search--panel .location-search-input {
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 13px;
+  height: 34px;
+}
+
+.location-search--panel .location-search-input::placeholder { color: #9ca3af; }
+
+.location-search--panel .location-search-input:focus {
+  border-color: var(--color-accent);
+  background: #fff;
+}
+
+.location-search--panel .location-search-loading { color: var(--color-text-muted); }
