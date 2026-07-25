@@ -79,7 +79,6 @@ export default function FeedbackButton() {
             <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Received.</p>
             <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.5 }}>
               Your invaluable feedback and thoughts are now stored somewhere in a server I rent for very little money.
-              {count && ` You're voice #${count} in this experiment.`}
             </p>
             <button
               onClick={handleClose}
@@ -100,7 +99,6 @@ export default function FeedbackButton() {
               fontSize: 13, color: "#374151", lineHeight: 1.6,
               border: "1px solid #e5e7eb",
             }}>
-              <br/><br/>
               Tell me what you think, what you want to see or what broke.
             </div>
 
