@@ -1,5 +1,4 @@
 import { useState } from "react";
-import LocationSearch from "./LocationSearch";
 
 const STATES = {
   idle:    { label: "Use my location", icon: "⊕" },
@@ -109,11 +108,6 @@ export default function LocationControl({ onLocate }) {
           ? errMsg
           : "Tap the map to drop a pin, or use your device location"}
       </p>
-
-      {/* Search bar — sits below the tooltip in the same stack */}
-      <div style={{ width: 220 }}>
-        <LocationSearch onSelect={onLocate} variant="light" />
-      </div>
     </div>
   );
 }
