@@ -506,3 +506,13 @@ body {
 }
 
 .location-search--panel .location-search-loading { color: var(--color-text-muted); }
+
+.leaflet-top.leaflet-right {
+  margin-top: 140px;
+}
+
+@media (max-width: 768px) {
+  .leaflet-top.leaflet-right {
+    margin-top: 120px;
+  }
+}

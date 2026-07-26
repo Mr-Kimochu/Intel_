@@ -1,13 +1,21 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { MapContainer, TileLayer, Marker, useMapEvents, Circle, Polyline, useMap } from "react-leaflet";
 import { useEffect } from "react";
 import "leaflet/dist/leaflet.css";
 import L from "leaflet";
+import "@geoman-io/leaflet-geoman-free";
+import "@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css";
+import area from "@turf/area";
+import { polygon as turfPolygon } from "@turf/helpers";
 import OsmOverlay, { OsmLegend } from "./OsmOverlay";
 import LocationControl from "./LocationControl";
 import ContourLayer from "./ContourLayer";
 import LandCoverOverlay from "./LandCoverOverlay";
 import { SoilImageLayer, SoilControls } from "./SoilMapOverlay";
+import {
+  MIN_POLYGON_AREA_KM2, MAX_POLYGON_AREA_KM2,
+  POLYGON_TOO_SMALL_MSG, POLYGON_TOO_LARGE_MSG,
+} from "../constants/polygonLimits";
 
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
@@ -32,8 +40,96 @@ function offsetLatLon(lat, lon, distanceM, bearingDeg) {
   return [lat2 * (180 / Math.PI), lon2 * (180 / Math.PI)];
 }
 
+function haversineDistanceM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const toRad = (d) => (d * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
+// Converts a drawn polygon into a centroid + bounding radius, so it can
+// feed the existing point+radius analysis pipeline unchanged.
+function polygonToBoundingCircle(latlngs) {
+  const centroidLat = latlngs.reduce((s, p) => s + p.lat, 0) / latlngs.length;
+  const centroidLon = latlngs.reduce((s, p) => s + p.lng, 0) / latlngs.length;
+  const radiusM = Math.max(
+    ...latlngs.map((p) => haversineDistanceM(centroidLat, centroidLon, p.lat, p.lng))
+  );
+  return { lat: centroidLat, lon: centroidLon, radiusM: Math.round(radiusM) };
+}
+
+function getAreaKm2(latlngs) {
+  const coords = latlngs.map((p) => [p.lng, p.lat]);
+  coords.push(coords[0]); // close the ring
+  return area(turfPolygon([coords])) / 1_000_000; // m² → km²
+}
+
 function ClickHandler({ onPick }) {
   useMapEvents({ click(e) { onPick(e.latlng.lat, e.latlng.lng); } });
+  return null;
+}
+
+// Drives leaflet-geoman directly via the map instance — no React wrapper
+
+function DrawControl({ onAreaSelect }) {
+  const map = useMap();
+  const drawnLayerRef = useRef(null);
+
+  useEffect(() => {
+    map.pm.addControls({
+      position: "topright",
+      drawMarker: false,
+      drawCircleMarker: false,
+      drawPolyline: false,
+      drawCircle: false,
+      drawRectangle: true,
+      drawPolygon: true,
+      editMode: false,
+      dragMode: false,
+      cutPolygon: false,
+      rotateMode: false,
+      removalMode: true,
+    });
+
+    const handleCreate = (e) => {
+      const layer = e.layer;
+      const latlngs = layer.getLatLngs()[0];
+
+      const km2 = getAreaKm2(latlngs);
+
+      if (km2 < MIN_POLYGON_AREA_KM2) {
+        alert(POLYGON_TOO_SMALL_MSG);
+        map.removeLayer(layer);
+        return;
+      }
+      if (km2 > MAX_POLYGON_AREA_KM2) {
+        alert(POLYGON_TOO_LARGE_MSG);
+        map.removeLayer(layer);
+        return;
+      }
+
+      // Only one drawn shape at a time
+      if (drawnLayerRef.current) {
+        map.removeLayer(drawnLayerRef.current);
+      }
+      drawnLayerRef.current = layer;
+
+      const { lat, lon, radiusM } = polygonToBoundingCircle(latlngs);
+      onAreaSelect?.(lat, lon, radiusM, km2);
+    };
+
+    map.on("pm:create", handleCreate);
+
+    return () => {
+      map.off("pm:create", handleCreate);
+      map.pm.removeControls();
+    };
+  }, [map, onAreaSelect]);
+
   return null;
 }
 
@@ -76,7 +172,7 @@ function TerrainProfileOverlay({ pin, profile }) {
   );
 }
 
-export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles, extent, onPick }) {
+export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles, extent, onPick, onAreaSelect }) {
   const center = pin ? [pin.lat, pin.lon] : [-3.45, 38.35];
 
   // soilLayer state lives here so it can be shared between
@@ -100,6 +196,9 @@ export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles,
         <ClickHandler onPick={onPick} />
         <FlyToPin pin={pin} />
         {pin && <Marker position={[pin.lat, pin.lon]} />}
+
+        {/* Polygon/rectangle drawing — draws a custom analysis area */}
+        <DrawControl onAreaSelect={onAreaSelect} />
 
         {/* Terrain */}
         {toggles.elevationBuffer && <ElevationBufferOverlay pin={pin} terrain={terrain} />}

@@ -10,10 +10,14 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@geoman-io/leaflet-geoman-free": "^2.20.0",
+    "@turf/area": "^7.3.5",
+    "@turf/helpers": "^7.3.5",
     "@vercel/analytics": "^2.0.1",
     "axios": "^1.18.0",
     "d3": "^7.9.0",
     "leaflet": "^1.9.4",
+    "leaflet-draw": "^1.0.4",
     "react": "^19.2.6",
     "react-dom": "^19.2.6",
     "react-leaflet": "^5.0.0",
