@@ -54,6 +54,7 @@ body {
   height: var(--header-h);
   display: flex;
   align-items: center;
+  justify-content: space-between;
   flex-shrink: 0;
   z-index: 1000;
   gap: 12px;

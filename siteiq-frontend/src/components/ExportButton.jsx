@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { getAuthHeader } from "../lib/supabase";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:8000";
 
@@ -57,9 +58,10 @@ export default function ExportButton({ pin, radiusM, floodRisk, soil, climateSol
   async function handleReport() {
     setLoading("report"); setError(null);
     try {
+      const headers = await getAuthHeader();
       const resp = await fetch(`${API_BASE}/site-report-pdf`, {
         method:  "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", ...headers },
         body: JSON.stringify({
           lat: pin.lat, lon: pin.lon, radius_m: radiusM, title,
           flood_risk:    floodRisk    ?? null,
