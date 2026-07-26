@@ -79,12 +79,12 @@ export default function FeedbackButton() {
             <p style={{ fontSize: 15, fontWeight: 600, marginBottom: 6 }}>Received.</p>
             <p style={{ fontSize: 13, color: "#6b7280", marginBottom: 16, lineHeight: 1.5 }}>
               Your invaluable feedback and thoughts are now stored somewhere in a server I rent for very little money.
-              {count && ` You're voice #${count} in this strange little experiment.`}
+              {count && ` You're voice #${count} in this experiment.`}
             </p>
             <button
               onClick={handleClose}
               style={{
-                padding: "8px 20px", background: "#1f2937", color: "#fff",
+                padding: "8px 10px", background: "#1f2937", color: "#fff",
                 border: "none", borderRadius: 7, cursor: "pointer",
                 fontSize: 13, fontFamily: "var(--font-body)",
               }}
@@ -95,8 +95,8 @@ export default function FeedbackButton() {
         ) : (
           <>
             <div style={{
-              background: "#f9fafb", borderRadius: 8,
-              padding: "12px 14px", marginBottom: 3,
+              background: "#f9fafb", borderRadius: 4,
+              padding: "12px 14px", marginBottom: 5,
               fontSize: 13, color: "#374151", lineHeight: 1.6,
               border: "1px solid #e5e7eb",
             }}>

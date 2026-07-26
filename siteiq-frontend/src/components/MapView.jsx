@@ -173,7 +173,7 @@ function TerrainProfileOverlay({ pin, profile }) {
 }
 
 export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles, extent, onPick, onAreaSelect }) {
-  const center = pin ? [pin.lat, pin.lon] : [-3.45, 38.35];
+  const center = pin ? [pin.lat, pin.lon] : [-1.2833, 36.8167]; // Nairobi, Kenya 
 
   // soilLayer state lives here so it can be shared between
   // SoilImageLayer (inside MapContainer) and SoilControls (outside)
@@ -216,8 +216,6 @@ export default function MapView({ pin, osm, terrain, profile, elevGrid, toggles,
       </MapContainer>
 
       {/* ── Overlays outside MapContainer (plain HTML, no Leaflet context) ── */}
-
-
 
       {/* GPS locate button */}
       <LocationControl onLocate={onPick} />

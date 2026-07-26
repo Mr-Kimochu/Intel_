@@ -9,6 +9,7 @@ import LandCoverCard from "./LandCoverCard";
 import ExtentSelector from "./ExtentSelector";
 import ExportButton from "./ExportButton";
 import LocationSearch from "./LocationSearch";
+import SaveAnalysis from "./SaveAnalysis";
 
 function OsmGroup({ title, items, renderItem }) {
   const [open, setOpen] = useState(false);
@@ -62,7 +63,7 @@ export default function SitePanel({
   climateSolar, soil, landCover, suitability,
   terrainLoading, riskLoading, osmLoading, climateLoading, soilLoading, lcLoading,
   riskError, osmError, climateError, soilError, lcError,
-  toggles, extent, onExtentChange, onPick,
+  toggles, extent, onExtentChange, onPick, user,
 }) {
   const [sheetOpen, setSheetOpen] = useState(false);
 
@@ -195,7 +196,15 @@ export default function SitePanel({
           )}
         </Section>
 
-        <ExportButton pin={pin} radiusM={extent} floodRisk={floodRisk} soil={soil} climateSolar={climateSolar} />
+        {/* Save analysis — only when signed in */}
+        <SaveAnalysis
+          user={user} pin={pin} elevation={elevation}
+          terrain={terrain} floodRisk={floodRisk}
+          soil={soil} climateSolar={climateSolar}
+          landCover={landCover} osm={osm} extent={extent}
+        />
+
+        <ExportButton pin={pin} radiusM={extent} floodRisk={floodRisk} soil={soil} climateSolar={climateSolar} user={user} />
 
         <p style={{ margin: "16px 0 0", fontSize: 10, color: "#9ca3af", lineHeight: 1.5,
           borderTop: "1px solid #f3f4f6", paddingTop: 10 }}>

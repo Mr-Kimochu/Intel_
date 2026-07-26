@@ -48,3 +48,28 @@ export async function getLandUseSuitability(lat, lon, params = {}) {
   const { data } = await client.get("/land-use-suitability", { params: { lat, lon, ...params } });
   return data;
 }
+import { getAuthHeader } from "./lib/supabase";
+
+export async function listAnalyses() {
+  const headers = await getAuthHeader();
+  const { data } = await client.get("/analyses", { headers });
+  return data;
+}
+
+export async function getAnalysis(analysisId) {
+  const headers = await getAuthHeader();
+  const { data } = await client.get(`/analyses/${analysisId}`, { headers });
+  return data;
+}
+
+export async function saveAnalysis(payload) {
+  const headers = await getAuthHeader();
+  const { data } = await client.post("/analyses", payload, { headers });
+  return data;
+}
+
+export async function deleteAnalysis(analysisId) {
+  const headers = await getAuthHeader();
+  const { data } = await client.delete(`/analyses/${analysisId}`, { headers });
+  return data;
+}
