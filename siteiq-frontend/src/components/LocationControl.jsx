@@ -108,6 +108,7 @@ export default function LocationControl({ onLocate }) {
           ? errMsg
           : "Tap the map to drop a pin, or use your device location"}
       </p>
+
     </div>
   );
 }
