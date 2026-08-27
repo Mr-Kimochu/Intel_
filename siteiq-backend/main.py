@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.analysis import router as analysis_router
+from app.api.sentinel2 import router as sentinel2_router
 
 from app.api import (
     climate,
@@ -41,3 +42,4 @@ app.include_router(sites.router)
 app.include_router(analyses.router)
 app.include_router(sms.router)
 app.include_router(analysis_router)
+app.include_router(sentinel2_router)
